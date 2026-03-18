@@ -18,6 +18,8 @@ export type AssessmentRecord = {
   teacher_note: string | null;
   confidence_summary: string | null;
   raw_file_path: string | null;
+  raw_upload_expires_at: string | null;
+  retention_category: string;
   expires_at: string | null;
   created_at: string;
 };
@@ -84,20 +86,161 @@ export function parseKeyValueLines(
   return { success: true as const, data: result };
 }
 
+const conceptHeaderAliases = ["concept", "concept_name", "topic", "skill", "standard"];
+const masteryHeaderAliases = [
+  "mastery",
+  "mastery_value",
+  "score",
+  "percent",
+  "percentage",
+  "value",
+];
+const distributionLabelAliases = ["band", "label", "range", "bucket", "level"];
+const distributionValueAliases = ["count", "students", "value", "total", "frequency", "number"];
+const distributionLabelHints = [
+  "low",
+  "medium",
+  "high",
+  "emerging",
+  "developing",
+  "approaching",
+  "strong",
+  "proficient",
+  "struggling",
+];
+
+function normalizeCsvCell(value: string) {
+  return value.replace(/^\uFEFF/, "").replace(/^"|"$/g, "").trim();
+}
+
+function normalizeCsvHeader(value: string) {
+  return normalizeCsvCell(value).toLowerCase().replace(/[\s-]+/g, "_");
+}
+
+function detectDelimiter(headerLine: string) {
+  const candidates = [",", ";", "\t"];
+  let bestDelimiter = ",";
+  let bestScore = -1;
+
+  for (const delimiter of candidates) {
+    const score = headerLine.split(delimiter).length;
+    if (score > bestScore) {
+      bestScore = score;
+      bestDelimiter = delimiter;
+    }
+  }
+
+  return bestDelimiter;
+}
+
 function parseCsvRows(text: string) {
   const rows = text
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
 
-  if (rows.length < 2) {
-    return { success: false as const, error: "CSV files need a header row and at least one data row." };
+  if (rows.length === 0) {
+    return { success: false as const, error: "CSV files need at least one row of data." };
   }
 
-  const headers = rows[0].split(",").map((header) => header.trim().toLowerCase());
-  const dataRows = rows.slice(1).map((row) => row.split(",").map((cell) => cell.trim()));
+  const delimiter = detectDelimiter(rows[0]);
+  const parsedRows = rows.map((row) => row.split(delimiter).map((cell) => normalizeCsvCell(cell)));
+  return { success: true as const, rows: parsedRows };
+}
 
-  return { success: true as const, headers, dataRows };
+function findHeaderIndex(headers: string[], aliases: string[]) {
+  return headers.findIndex((header) => aliases.includes(header));
+}
+
+function looksLikeDistributionLabel(value: string) {
+  return distributionLabelHints.includes(value.toLowerCase());
+}
+
+function isNumericCell(value: string) {
+  return value !== "" && !Number.isNaN(Number(value));
+}
+
+function hasAnyNumericCell(row: string[]) {
+  return row.some(isNumericCell);
+}
+
+function inferPairsFromRows(rows: string[][]) {
+  const pairs: Array<{ label: string; value: number }> = [];
+
+  for (const row of rows) {
+    const label = row.find((cell) => cell && !isNumericCell(cell)) ?? "";
+    const numericCell = row.find(isNumericCell);
+
+    if (!label || !numericCell) {
+      continue;
+    }
+
+    pairs.push({ label, value: Number(numericCell) });
+  }
+
+  return pairs;
+}
+
+function inferWideSummary(headers: string[], rows: string[][]) {
+  const numericColumnIndexes = headers
+    .map((header, index) => ({ header, index }))
+    .filter(({ header, index }) => {
+      if (!header) {
+        return false;
+      }
+
+      const normalized = normalizeCsvHeader(header);
+      if (["student", "student_name", "name", "id", "student_id"].includes(normalized)) {
+        return false;
+      }
+
+      return rows.some((row) => isNumericCell(row[index] ?? ""));
+    });
+
+  if (numericColumnIndexes.length === 0) {
+    return null;
+  }
+
+  const conceptSummary: Record<string, number> = {};
+
+  for (const { header, index } of numericColumnIndexes) {
+    const numericValues = rows
+      .map((row) => row[index] ?? "")
+      .filter(isNumericCell)
+      .map((value) => Number(value));
+
+    if (numericValues.length === 0) {
+      continue;
+    }
+
+    const average =
+      numericValues.reduce((sum, value) => sum + value, 0) / numericValues.length;
+    conceptSummary[header] = Number(average.toFixed(2));
+  }
+
+  return Object.keys(conceptSummary).length > 0 ? conceptSummary : null;
+}
+
+function inferColumnAverages(rows: string[][]) {
+  const maxColumns = Math.max(...rows.map((row) => row.length));
+  const conceptSummary: Record<string, number> = {};
+
+  for (let index = 0; index < maxColumns; index += 1) {
+    const numericValues = rows
+      .map((row) => row[index] ?? "")
+      .filter(isNumericCell)
+      .map((value) => Number(value));
+
+    if (numericValues.length === 0) {
+      continue;
+    }
+
+    const average =
+      numericValues.reduce((sum, value) => sum + value, 0) / numericValues.length;
+    conceptSummary[`Column ${index + 1}`] = Number(average.toFixed(2));
+  }
+
+  return Object.keys(conceptSummary).length > 0 ? conceptSummary : null;
 }
 
 export function parseAssessmentCsv(text: string) {
@@ -107,11 +250,22 @@ export function parseAssessmentCsv(text: string) {
     return parsedRows;
   }
 
-  const { headers, dataRows } = parsedRows;
-  const conceptIndex = headers.indexOf("concept");
-  const masteryIndex = headers.findIndex((header) => ["mastery", "mastery_value", "score"].includes(header));
-  const labelIndex = headers.findIndex((header) => ["band", "label", "range"].includes(header));
-  const valueIndex = headers.findIndex((header) => ["count", "value"].includes(header));
+  const [firstRow, ...remainingRows] = parsedRows.rows;
+  const normalizedHeaders = firstRow.map((header) => normalizeCsvHeader(header));
+  const conceptIndex = findHeaderIndex(normalizedHeaders, conceptHeaderAliases);
+  const masteryIndex = findHeaderIndex(normalizedHeaders, masteryHeaderAliases);
+  const labelIndex = findHeaderIndex(normalizedHeaders, distributionLabelAliases);
+  const valueIndex = findHeaderIndex(normalizedHeaders, distributionValueAliases);
+  const hasRecognizedHeader =
+    (conceptIndex !== -1 && masteryIndex !== -1) || (labelIndex !== -1 && valueIndex !== -1);
+  const dataRows = hasRecognizedHeader ? remainingRows : parsedRows.rows;
+
+  if (dataRows.length === 0) {
+    return {
+      success: false as const,
+      error: "CSV files need at least one usable data row.",
+    };
+  }
 
   if (conceptIndex !== -1 && masteryIndex !== -1) {
     const conceptSummary: Record<string, number> = {};
@@ -159,10 +313,120 @@ export function parseAssessmentCsv(text: string) {
     };
   }
 
+  const usableRows = dataRows.filter((row) => row.length >= 2);
+
+  if (usableRows.length > 0) {
+    const firstLabel = usableRows[0][0];
+    const allNumericSecondColumn = usableRows.every((row) => !Number.isNaN(Number(row[1])));
+
+    if (firstLabel && allNumericSecondColumn) {
+      if (looksLikeDistributionLabel(firstLabel)) {
+        const scoreSummary: Record<string, number> = {};
+
+        for (const row of usableRows) {
+          const label = row[0];
+          const value = Number(row[1]);
+
+          if (!label || Number.isNaN(value)) {
+            return {
+              success: false as const,
+              error: "Each distribution row needs a label and numeric value.",
+            };
+          }
+
+          scoreSummary[label] = value;
+        }
+
+        return {
+          success: true as const,
+          data: {
+            concept_summary: null as Record<string, number> | null,
+            score_summary: scoreSummary,
+          },
+        };
+      }
+
+      const conceptSummary: Record<string, number> = {};
+
+      for (const row of usableRows) {
+        const concept = row[0];
+        const value = Number(row[1]);
+
+        if (!concept || Number.isNaN(value)) {
+          return {
+            success: false as const,
+            error: "Each concept row needs a concept label and numeric value.",
+          };
+        }
+
+        conceptSummary[concept] = value;
+      }
+
+      return {
+        success: true as const,
+        data: {
+          concept_summary: conceptSummary,
+          score_summary: null as Record<string, number> | null,
+        },
+      };
+    }
+  }
+
+  const pairRows = inferPairsFromRows(dataRows.filter(hasAnyNumericCell));
+  if (pairRows.length > 0) {
+    const looksLikeDistribution = pairRows.every((pair) => looksLikeDistributionLabel(pair.label));
+
+    if (looksLikeDistribution) {
+      return {
+        success: true as const,
+        data: {
+          concept_summary: null as Record<string, number> | null,
+          score_summary: Object.fromEntries(
+            pairRows.map((pair) => [pair.label, pair.value]),
+          ),
+        },
+      };
+    }
+
+    return {
+      success: true as const,
+      data: {
+        concept_summary: Object.fromEntries(
+          pairRows.map((pair) => [pair.label, pair.value]),
+        ),
+        score_summary: null as Record<string, number> | null,
+      },
+    };
+  }
+
+  if (remainingRows.length > 0) {
+    const wideSummary = inferWideSummary(firstRow, remainingRows);
+    if (wideSummary) {
+      return {
+        success: true as const,
+        data: {
+          concept_summary: wideSummary,
+          score_summary: null as Record<string, number> | null,
+        },
+      };
+    }
+  }
+
+  const columnAverages = inferColumnAverages(dataRows);
+  if (columnAverages) {
+    return {
+      success: true as const,
+      data: {
+        concept_summary: columnAverages,
+        score_summary: null as Record<string, number> | null,
+      },
+    };
+  }
+
   return {
     success: false as const,
     error:
-      'CSV headers must match either "concept, mastery_value" for concept mastery or "band, count" for distribution summaries.',
+      "TeachLens could not interpret this CSV. Try a plain CSV export with at least one numeric column.",
   };
 }
 

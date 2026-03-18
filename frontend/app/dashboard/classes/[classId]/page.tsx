@@ -1,25 +1,77 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { AiSummaryPanel } from "@/components/classes/ai-summary-panel";
 import { AnalyticsCharts } from "@/components/classes/analytics-charts";
 import { AssessmentForm } from "@/components/classes/assessment-form";
 import { DeleteClassButton } from "@/components/classes/delete-class-button";
 import { RecommendationPanel } from "@/components/classes/recommendation-panel";
+import { TeachingCycleTimeline } from "@/components/classes/teaching-cycle-timeline";
 import type { AssessmentRecord } from "@/lib/assessments";
 import { analyzeAssessment, buildTrendPoints } from "@/lib/analytics";
 import type { ClassRecord } from "@/lib/classes";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import type {
+  RecommendationHistoryRecord,
+  TeachingCycleTimelineEntry,
+  TeachingMethodLogRecord,
+} from "@/lib/tracker";
 
 import { deleteClassAction } from "../actions";
 
 type ClassDetailPageProps = {
-  params: {
+  params: Promise<{
     classId: string;
-  };
+  }>;
 };
 
+function buildTimelineEntries(
+  assessments: AssessmentRecord[],
+  recommendations: RecommendationHistoryRecord[],
+  logs: TeachingMethodLogRecord[],
+) {
+  const recommendationsByAssessment = new Map<string, RecommendationHistoryRecord[]>();
+  const logsByAssessment = new Map<string, TeachingMethodLogRecord[]>();
+
+  for (const recommendation of recommendations) {
+    if (!recommendation.assessment_id) {
+      continue;
+    }
+
+    const existing = recommendationsByAssessment.get(recommendation.assessment_id) ?? [];
+    existing.push(recommendation);
+    recommendationsByAssessment.set(recommendation.assessment_id, existing);
+  }
+
+  for (const log of logs) {
+    if (!log.assessment_id) {
+      continue;
+    }
+
+    const existing = logsByAssessment.get(log.assessment_id) ?? [];
+    existing.push(log);
+    logsByAssessment.set(log.assessment_id, existing);
+  }
+
+  return assessments.map((assessment) => {
+    const analysis = analyzeAssessment(assessment);
+
+    return {
+      assessmentId: assessment.id,
+      assessmentTitle: assessment.title,
+      assessmentDate: assessment.assessment_date,
+      assessmentType: assessment.assessment_type,
+      averageScore: assessment.average_score ?? null,
+      detectedPatterns: analysis.detectedPatterns,
+      recommendations: recommendationsByAssessment.get(assessment.id) ?? [],
+      methodLogs: logsByAssessment.get(assessment.id) ?? [],
+    } satisfies TeachingCycleTimelineEntry;
+  });
+}
+
 export default async function ClassDetailPage({ params }: ClassDetailPageProps) {
-  const supabase = createSupabaseServerClient();
+  const { classId } = await params;
+  const supabase = await createSupabaseServerClient();
 
   if (!supabase) {
     return (
@@ -32,7 +84,7 @@ export default async function ClassDetailPage({ params }: ClassDetailPageProps) 
   const { data, error } = await supabase
     .from("classes")
     .select("id, course_name, subject_area, class_size, class_level, term_label, created_at, updated_at")
-    .eq("id", params.classId)
+    .eq("id", classId)
     .single();
 
   if (error || !data) {
@@ -44,7 +96,7 @@ export default async function ClassDetailPage({ params }: ClassDetailPageProps) 
   const { data: assessments } = await supabase
     .from("assessments")
     .select(
-      "id, title, assessment_date, assessment_type, topic, average_score, score_summary, concept_summary, teacher_note, confidence_summary, raw_file_path, expires_at, created_at",
+      "id, title, assessment_date, assessment_type, topic, average_score, score_summary, concept_summary, teacher_note, confidence_summary, raw_file_path, raw_upload_expires_at, retention_category, expires_at, created_at",
     )
     .eq("class_id", classRecord.id)
     .order("assessment_date", { ascending: false });
@@ -53,14 +105,32 @@ export default async function ClassDetailPage({ params }: ClassDetailPageProps) 
   const latestAssessment = assessmentHistory[0] ?? null;
   const latestAnalysis = latestAssessment ? analyzeAssessment(latestAssessment) : null;
   const trendPoints = buildTrendPoints(assessmentHistory);
-  const { data: latestRecommendations } =
-    latestAssessment
-      ? await supabase
-          .from("recommendations")
-          .select("id, method_name, reason, implementation_note")
-          .eq("assessment_id", latestAssessment.id)
-          .order("created_at", { ascending: true })
-      : { data: [] };
+  const { data: recommendationRows } = await supabase
+    .from("recommendations")
+    .select("id, assessment_id, method_name, reason, implementation_note, created_at")
+    .eq("class_id", classRecord.id)
+    .order("created_at", { ascending: true });
+  const { data: teachingMethodLogs } = await supabase
+    .from("teaching_method_logs")
+    .select(
+      "id, assessment_id, weekly_analysis_id, recommendation_id, log_date, method_used, reflection_note, was_recommended, created_at",
+    )
+    .eq("class_id", classRecord.id)
+    .order("log_date", { ascending: false })
+    .order("created_at", { ascending: false });
+
+  const recommendationHistory = (recommendationRows ?? []) as RecommendationHistoryRecord[];
+  const latestRecommendations = latestAssessment
+    ? recommendationHistory.filter(
+        (recommendation) => recommendation.assessment_id === latestAssessment.id,
+      )
+    : [];
+  const methodLogHistory = (teachingMethodLogs ?? []) as TeachingMethodLogRecord[];
+  const timelineEntries = buildTimelineEntries(
+    assessmentHistory,
+    recommendationHistory,
+    methodLogHistory,
+  );
 
   return (
     <section className="space-y-6">
@@ -80,6 +150,12 @@ export default async function ClassDetailPage({ params }: ClassDetailPageProps) 
           </div>
 
           <div className="flex flex-wrap gap-3">
+            <Link
+              href={`/dashboard/classes/${classRecord.id}/progress`}
+              className="rounded-full bg-mist px-4 py-2 text-sm font-semibold text-pine transition hover:bg-[#dfede6]"
+            >
+              View Progress
+            </Link>
             <Link
               href={`/dashboard/classes/${classRecord.id}/edit`}
               className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400"
@@ -197,14 +273,21 @@ export default async function ClassDetailPage({ params }: ClassDetailPageProps) 
       </section>
 
       <RecommendationPanel
+        classId={classRecord.id}
+        assessmentId={latestAssessment?.id ?? null}
         latestAssessmentTitle={latestAssessment?.title ?? null}
-        recommendations={(latestRecommendations ?? []) as {
-          id: string;
-          method_name: string;
-          reason: string | null;
-          implementation_note: string | null;
-        }[]}
+        recommendations={latestRecommendations}
       />
+
+      <AiSummaryPanel
+        className={classRecord.course_name}
+        assessmentTitle={latestAssessment?.title ?? null}
+        analysisDate={latestAssessment?.assessment_date ?? null}
+        analysis={latestAnalysis}
+        recommendations={latestRecommendations}
+      />
+
+      <TeachingCycleTimeline entries={timelineEntries} />
 
       <section className="rounded-[28px] border border-slate-200 bg-white/90 p-6 shadow-sm">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -294,7 +377,9 @@ export default async function ClassDetailPage({ params }: ClassDetailPageProps) 
                 {assessment.raw_file_path ? (
                   <p className="mt-4 text-xs leading-5 text-slate-500">
                     Raw CSV stored at <span className="font-mono">{assessment.raw_file_path}</span>
-                    {assessment.expires_at ? ` until ${assessment.expires_at}` : ""}.
+                    {assessment.raw_upload_expires_at
+                      ? ` until ${assessment.raw_upload_expires_at}`
+                      : ""}.
                   </p>
                 ) : null}
               </article>

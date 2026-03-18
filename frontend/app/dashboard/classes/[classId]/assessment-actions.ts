@@ -20,6 +20,7 @@ export type AssessmentActionState = {
 };
 
 const rawUploadRetentionDays = Number(process.env.RAW_UPLOAD_RETENTION_DAYS ?? "30");
+const detailRecordRetentionDays = Number(process.env.DETAIL_RECORD_RETENTION_DAYS ?? "365");
 const rawUploadBucket = process.env.SUPABASE_STORAGE_BUCKET_RAW_UPLOADS ?? "raw-assessments";
 
 export async function createAssessmentAction(
@@ -41,7 +42,7 @@ export async function createAssessmentAction(
   let scoreSummary = parsed.data.score_summary;
   let conceptSummary = parsed.data.concept_summary;
   let rawFilePath: string | null = null;
-  let expiresAt: string | null = null;
+  let rawUploadExpiresAt: string | null = null;
 
   if (parsed.inputMethod === "csv") {
     if (!(file instanceof File) || file.size === 0) {
@@ -61,7 +62,7 @@ export async function createAssessmentAction(
 
     scoreSummary = parsedCsv.data.score_summary ?? scoreSummary;
     conceptSummary = parsedCsv.data.concept_summary ?? conceptSummary;
-    expiresAt = getRetentionExpiryDate(rawUploadRetentionDays);
+    rawUploadExpiresAt = getRetentionExpiryDate(rawUploadRetentionDays);
 
     const storagePath = buildRawAssessmentPath(context.user.id, classId, file.name);
     const fileBuffer = Buffer.from(await file.arrayBuffer());
@@ -90,14 +91,16 @@ export async function createAssessmentAction(
     score_summary: scoreSummary,
     concept_summary: conceptSummary,
     raw_file_path: rawFilePath,
-    expires_at: expiresAt,
+    raw_upload_expires_at: rawUploadExpiresAt,
+    retention_category: "assessment_detail",
+    expires_at: getRetentionExpiryDate(detailRecordRetentionDays),
   };
 
   const { data: insertedAssessment, error } = await context.supabase
     .from("assessments")
     .insert(assessmentPayload)
     .select(
-      "id, title, assessment_date, assessment_type, topic, average_score, score_summary, concept_summary, teacher_note, confidence_summary, raw_file_path, expires_at, created_at",
+      "id, title, assessment_date, assessment_type, topic, average_score, score_summary, concept_summary, teacher_note, confidence_summary, raw_file_path, raw_upload_expires_at, retention_category, expires_at, created_at",
     )
     .single();
 
@@ -117,6 +120,8 @@ export async function createAssessmentAction(
       method_name: item.methodName,
       reason: item.whyRecommended,
       implementation_note: item.implementationNote,
+      retention_category: "recommendation_detail",
+      expires_at: getRetentionExpiryDate(detailRecordRetentionDays),
     }));
 
     await context.supabase.from("recommendations").insert(recommendationRows);

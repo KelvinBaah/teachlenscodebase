@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useFormState } from "react-dom";
+import { useActionState } from "react";
 
 import {
   createClassAction,
@@ -22,7 +22,7 @@ const initialState: ClassActionState = {};
 
 export function ClassForm({ mode, classId, initialValues = emptyClassValues }: ClassFormProps) {
   const action = mode === "create" ? createClassAction : updateClassAction;
-  const [state, formAction] = useFormState(action, initialState);
+  const [state, formAction] = useActionState(action, initialState);
 
   return (
     <form

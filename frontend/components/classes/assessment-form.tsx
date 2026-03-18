@@ -1,7 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useFormState } from "react-dom";
+import { useActionState, useMemo, useState } from "react";
 
 import {
   createAssessmentAction,
@@ -20,7 +19,7 @@ const initialState: AssessmentActionState = {};
 export function AssessmentForm({ classId }: AssessmentFormProps) {
   const [inputMethod, setInputMethod] = useState<"manual" | "csv">("manual");
   const action = useMemo(() => createAssessmentAction.bind(null, classId), [classId]);
-  const [state, formAction] = useFormState(action, initialState);
+  const [state, formAction] = useActionState(action, initialState);
 
   return (
     <form

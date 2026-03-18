@@ -11,7 +11,7 @@ const statCards = [
 
 export default async function HomePage() {
   const { isConfigured } = getSupabaseConfig();
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const user =
     isConfigured && supabase
       ? (await supabase.auth.getUser()).data.user

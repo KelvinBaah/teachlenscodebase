@@ -3,8 +3,8 @@ import { cookies } from "next/headers";
 
 import { getSupabaseConfig } from "./config";
 
-export function createSupabaseServerClient() {
-  const cookieStore = cookies();
+export async function createSupabaseServerClient() {
+  const cookieStore = await cookies();
   const { supabaseUrl, supabaseAnonKey, isConfigured } = getSupabaseConfig();
 
   if (!isConfigured || !supabaseUrl || !supabaseAnonKey) {

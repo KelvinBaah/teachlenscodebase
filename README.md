@@ -60,6 +60,7 @@ Set these in `frontend/.env.local`:
 
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `NEXT_PUBLIC_BACKEND_API_URL`
 
 ### Backend
 
@@ -69,13 +70,20 @@ Set these in `backend/.env`:
 - `SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `RAW_UPLOAD_RETENTION_DAYS`
+- `DETAIL_RECORD_RETENTION_DAYS`
+- `CLEANUP_BATCH_SIZE`
+- `FRONTEND_ORIGIN`
+- `OPENAI_API_KEY`
+- `OPENAI_MODEL`
 
-`RAW_UPLOAD_RETENTION_DAYS` is a placeholder for the future retention workflow so raw uploaded data can be removed after a defined time window.
+`RAW_UPLOAD_RETENTION_DAYS` controls raw CSV deletion.
+`DETAIL_RECORD_RETENTION_DAYS` controls when detailed instructional records can be redacted or deleted.
+`OPENAI_API_KEY` is optional. If it is missing, TeachLens will fall back to a local summary instead of failing.
 
 ## Notes
 
 - This scaffold avoids storing personally identifiable student information by design intent. That rule should remain in place as features are added.
-- Recommendation logic, analytics, uploads, and AI summaries are intentionally not implemented yet.
+- The recommendation engine remains rule-based. AI is used only for optional explanation and summarization.
 - Deployment targets are expected to be Vercel for the frontend and Render or Railway for the backend.
 
 ## Authentication Setup
@@ -95,8 +103,9 @@ The first database migration lives at `supabase/migrations/001_core_schema.sql`.
 
 1. Open your Supabase project SQL editor.
 2. Run the contents of `supabase/migrations/001_core_schema.sql`.
-3. Confirm that the tables `profiles`, `classes`, `assessments`, `weekly_analyses`, `recommendations`, and `teaching_method_logs` were created.
-4. Confirm that row-level security is enabled and the ownership policies were created.
+3. Run `supabase/migrations/003_retention_cleanup_support.sql` after the core schema if you are upgrading an existing project.
+4. Confirm that the tables `profiles`, `classes`, `assessments`, `weekly_analyses`, `recommendations`, and `teaching_method_logs` were created.
+5. Confirm that row-level security is enabled and the ownership policies were created.
 
 This migration keeps the data model class-level and teacher-owned:
 
@@ -163,3 +172,54 @@ The rule-based recommendation engine uses the teaching-method matrix provided in
 - frontend recommendation mapping for stored assessment recommendations: `frontend/lib/recommendations.ts`
 
 The current workflow stores recommendation rows linked to each newly created assessment so later sessions can reuse them for teaching logs and summaries.
+
+## Weekly Tracker Workflow
+
+TeachLens now supports the lightweight weekly cycle described in the prompt:
+
+- Assess -> Analyze -> Recommend -> Adjust -> Reassess
+- one-click method logging directly from the recommendation panel
+- optional reflection notes for quick teacher context
+- a class timeline that pairs each assessment with detected patterns, recommendations, and methods used
+- a progress page at `frontend/app/dashboard/classes/[classId]/progress/page.tsx` for longitudinal trend review
+
+The main tracker files for this session are:
+
+- `frontend/app/dashboard/classes/[classId]/log-actions.ts`
+- `frontend/components/classes/method-log-form.tsx`
+- `frontend/components/classes/teaching-cycle-timeline.tsx`
+- `frontend/lib/tracker.ts`
+
+## Privacy And Retention
+
+TeachLens now includes a simple retention-friendly cleanup flow:
+
+- raw CSV uploads are deleted after `RAW_UPLOAD_RETENTION_DAYS`
+- detailed assessment notes can be reduced to aggregate-only records after `DETAIL_RECORD_RETENTION_DAYS`
+- weekly analyses, recommendations, and teaching method logs can be hard-deleted after their retention window
+- the in-app privacy note lives at `frontend/app/dashboard/help/page.tsx`
+- the cleanup entrypoint lives at `backend/app/cleanup_retention.py`
+
+Run the cleanup job manually with:
+
+```bash
+cd backend
+python -m app.cleanup_retention
+```
+
+This command is designed to be scheduled later with cron, GitHub Actions, Railway, Render, or another simple job runner.
+
+## AI Summary Layer
+
+TeachLens now includes an optional AI summary panel powered by the OpenAI Responses API.
+
+- backend endpoint: `POST /ai/summary`
+- backend service: `backend/app/ai_summary.py`
+- frontend panel: `frontend/components/classes/ai-summary-panel.tsx`
+
+Behavior notes:
+
+- AI explains existing analysis and rule-based recommendations only.
+- Recommendation selection still comes from the static matrix.
+- OpenAI requests are sent with `store=False`.
+- If `OPENAI_API_KEY` is missing or the request fails, the UI falls back to a local summary instead of blocking the class workflow.

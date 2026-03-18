@@ -5,13 +5,14 @@ import { valuesFromRecord, type ClassRecord } from "@/lib/classes";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 type EditClassPageProps = {
-  params: {
+  params: Promise<{
     classId: string;
-  };
+  }>;
 };
 
 export default async function EditClassPage({ params }: EditClassPageProps) {
-  const supabase = createSupabaseServerClient();
+  const { classId } = await params;
+  const supabase = await createSupabaseServerClient();
 
   if (!supabase) {
     notFound();
@@ -20,7 +21,7 @@ export default async function EditClassPage({ params }: EditClassPageProps) {
   const { data, error } = await supabase
     .from("classes")
     .select("id, course_name, subject_area, class_size, class_level, term_label")
-    .eq("id", params.classId)
+    .eq("id", classId)
     .single();
 
   if (error || !data) {

@@ -15,10 +15,14 @@ const dashboardCards = [
     title: "Recommendation Cycle",
     body: "Use later sessions to connect analysis, strategy suggestions, and teaching logs.",
   },
+  {
+    title: "Privacy And Retention",
+    body: "Review the MVP cleanup and retention notes that keep raw uploads and detailed records temporary.",
+  },
 ];
 
 export default async function DashboardPage() {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
 
   const classCount = supabase
     ? (await supabase.from("classes").select("id", { count: "exact", head: true })).count ?? 0
@@ -41,6 +45,12 @@ export default async function DashboardPage() {
             className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-ink transition hover:bg-slate-100"
           >
             Open Classes
+          </Link>
+          <Link
+            href="/dashboard/help"
+            className="rounded-full border border-white/20 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+          >
+            Privacy Notes
           </Link>
           <div className="rounded-full border border-white/20 px-4 py-2 text-sm text-white/80">
             Current class profiles: {classCount}

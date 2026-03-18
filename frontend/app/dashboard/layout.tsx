@@ -9,7 +9,7 @@ export default async function DashboardLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
 
   if (!supabase) {
     redirect("/sign-in");

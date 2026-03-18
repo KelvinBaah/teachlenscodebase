@@ -4,7 +4,7 @@ import type { ClassRecord } from "@/lib/classes";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export default async function ClassesPage() {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
 
   if (!supabase) {
     return (

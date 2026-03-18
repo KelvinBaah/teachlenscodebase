@@ -11,7 +11,7 @@ export type ClassActionState = {
 };
 
 async function getAuthenticatedContext() {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
 
   if (!supabase) {
     return { error: "Supabase is not configured. Add your frontend env values first." };

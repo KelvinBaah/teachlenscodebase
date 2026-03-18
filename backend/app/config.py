@@ -8,7 +8,12 @@ class Settings(BaseSettings):
     supabase_anon_key: str = ""
     supabase_service_role_key: str = ""
     raw_upload_retention_days: int = 30
+    detail_record_retention_days: int = 365
+    cleanup_batch_size: int = 200
     supabase_storage_bucket_raw_uploads: str = "raw-assessments"
+    frontend_origin: str = "http://localhost:3000"
+    openai_api_key: str = ""
+    openai_model: str = "gpt-5-mini"
 
     model_config = SettingsConfigDict(
         env_file=".env",

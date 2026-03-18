@@ -1,3 +1,5 @@
+import { MethodLogForm } from "./method-log-form";
+
 type RecommendationRecord = {
   id: string;
   method_name: string;
@@ -6,11 +8,15 @@ type RecommendationRecord = {
 };
 
 type RecommendationPanelProps = {
+  classId: string;
+  assessmentId: string | null;
   latestAssessmentTitle: string | null;
   recommendations: RecommendationRecord[];
 };
 
 export function RecommendationPanel({
+  classId,
+  assessmentId,
   latestAssessmentTitle,
   recommendations,
 }: RecommendationPanelProps) {
@@ -58,6 +64,14 @@ export function RecommendationPanel({
           ))}
         </div>
       )}
+
+      <div className="mt-6">
+        <MethodLogForm
+          classId={classId}
+          assessmentId={assessmentId}
+          recommendations={recommendations}
+        />
+      </div>
     </section>
   );
 }

@@ -1,4 +1,6 @@
 from app.schemas import (
+    AISummaryRequest,
+    AISummaryResponse,
     AssessmentCreate,
     AssessmentAnalysisRead,
     AssessmentRead,
@@ -8,11 +10,14 @@ from app.schemas import (
     ProfileRead,
     RecommendationRead,
     RecommendationSuggestionRead,
+    TeachingMethodLogCreate,
     TeachingMethodLogRead,
     WeeklyAnalysisRead,
 )
 
 __all__ = [
+    "AISummaryRequest",
+    "AISummaryResponse",
     "AssessmentCreate",
     "AssessmentAnalysisRead",
     "AssessmentRead",
@@ -22,6 +27,7 @@ __all__ = [
     "ProfileRead",
     "RecommendationRead",
     "RecommendationSuggestionRead",
+    "TeachingMethodLogCreate",
     "TeachingMethodLogRead",
     "WeeklyAnalysisRead",
 ]
