@@ -40,6 +40,10 @@ Service settings:
 - Root directory: `backend`
 - Build command: `pip install -r requirements.txt`
 - Start command: `python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+- Included repo configs:
+  - Render: `render.yaml`
+  - Railway: `railway.json`
+  - Python runtime pin: `backend/runtime.txt`
 
 Environment variables:
 
