@@ -45,10 +45,14 @@ export async function createClassAction(
     return { error: parsed.error };
   }
 
-  const { error } = await context.supabase.from("classes").insert({
-    teacher_id: context.user.id,
-    ...parsed.data,
-  });
+  const { data, error } = await context.supabase
+    .from("classes")
+    .insert({
+      teacher_id: context.user.id,
+      ...parsed.data,
+    })
+    .select("id")
+    .single();
 
   if (error) {
     return { error: error.message };
@@ -56,7 +60,7 @@ export async function createClassAction(
 
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/classes");
-  redirect("/dashboard/classes");
+  redirect(data?.id ? `/dashboard/classes/${data.id}?created=1` : "/dashboard/classes");
 }
 
 export async function updateClassAction(

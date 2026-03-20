@@ -14,7 +14,7 @@ export function SubmitButton({ idleLabel, pendingLabel }: SubmitButtonProps) {
     <button
       type="submit"
       aria-disabled={pending}
-      className="rounded-full bg-pine px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#184a3c] disabled:cursor-not-allowed disabled:opacity-70"
+      className="rounded-full bg-primary-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-70"
       disabled={pending}
     >
       {pending ? pendingLabel : idleLabel}

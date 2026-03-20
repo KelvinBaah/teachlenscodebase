@@ -25,15 +25,25 @@ export function ClassForm({ mode, classId, initialValues = emptyClassValues }: C
   const [state, formAction] = useActionState(action, initialState);
 
   return (
-    <form
-      action={formAction}
-      className="space-y-6 rounded-[28px] border border-slate-200 bg-white/90 p-8 shadow-sm"
-    >
+    <form action={formAction} className="paper-card space-y-6 p-8">
       {mode === "edit" ? <input type="hidden" name="classId" value={classId} /> : null}
+
+      <div className="max-w-3xl">
+        <p className="section-kicker">{mode === "create" ? "New Class" : "Edit Class"}</p>
+        <h2 className="mt-3 text-3xl font-semibold text-neutral-900 dark:text-neutral-100">
+          {mode === "create"
+            ? "Set up a lightweight class profile"
+            : "Update the class profile"}
+        </h2>
+        <p className="mt-3 text-sm leading-6 text-neutral-500 dark:text-neutral-400">
+          Keep the profile simple and class-level only so the rest of the assessment workflow stays
+          fast, privacy-safe, and easy to maintain.
+        </p>
+      </div>
 
       <div className="grid gap-5 md:grid-cols-2">
         <div className="space-y-2 md:col-span-2">
-          <label className="text-sm font-medium text-slate-700" htmlFor="courseName">
+          <label className="text-sm font-medium text-neutral-700 dark:text-neutral-200" htmlFor="courseName">
             Course Name
           </label>
           <input
@@ -41,13 +51,13 @@ export function ClassForm({ mode, classId, initialValues = emptyClassValues }: C
             name="courseName"
             required
             defaultValue={initialValues.courseName}
-            className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-pine focus:ring-2 focus:ring-pine/20"
+            className="w-full rounded-2xl border border-neutral-200 px-4 py-3 text-sm outline-none transition focus:border-primary-400 focus:ring-2 focus:ring-primary-100 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:focus:border-primary-500 dark:focus:ring-primary-500/20"
             placeholder="Biology 101"
           />
         </div>
 
         <div className="space-y-2">
-          <label className="text-sm font-medium text-slate-700" htmlFor="subjectArea">
+          <label className="text-sm font-medium text-neutral-700 dark:text-neutral-200" htmlFor="subjectArea">
             Subject Area
           </label>
           <input
@@ -55,13 +65,13 @@ export function ClassForm({ mode, classId, initialValues = emptyClassValues }: C
             name="subjectArea"
             required
             defaultValue={initialValues.subjectArea}
-            className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-pine focus:ring-2 focus:ring-pine/20"
+            className="w-full rounded-2xl border border-neutral-200 px-4 py-3 text-sm outline-none transition focus:border-primary-400 focus:ring-2 focus:ring-primary-100 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:focus:border-primary-500 dark:focus:ring-primary-500/20"
             placeholder="Biology"
           />
         </div>
 
         <div className="space-y-2">
-          <label className="text-sm font-medium text-slate-700" htmlFor="classLevel">
+          <label className="text-sm font-medium text-neutral-700 dark:text-neutral-200" htmlFor="classLevel">
             Class Level
           </label>
           <input
@@ -69,13 +79,13 @@ export function ClassForm({ mode, classId, initialValues = emptyClassValues }: C
             name="classLevel"
             required
             defaultValue={initialValues.classLevel}
-            className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-pine focus:ring-2 focus:ring-pine/20"
+            className="w-full rounded-2xl border border-neutral-200 px-4 py-3 text-sm outline-none transition focus:border-primary-400 focus:ring-2 focus:ring-primary-100 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:focus:border-primary-500 dark:focus:ring-primary-500/20"
             placeholder="Undergraduate Intro"
           />
         </div>
 
         <div className="space-y-2">
-          <label className="text-sm font-medium text-slate-700" htmlFor="classSize">
+          <label className="text-sm font-medium text-neutral-700 dark:text-neutral-200" htmlFor="classSize">
             Class Size
           </label>
           <input
@@ -86,20 +96,20 @@ export function ClassForm({ mode, classId, initialValues = emptyClassValues }: C
             step={1}
             inputMode="numeric"
             defaultValue={initialValues.classSize}
-            className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-pine focus:ring-2 focus:ring-pine/20"
+            className="w-full rounded-2xl border border-neutral-200 px-4 py-3 text-sm outline-none transition focus:border-primary-400 focus:ring-2 focus:ring-primary-100 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:focus:border-primary-500 dark:focus:ring-primary-500/20"
             placeholder="32"
           />
         </div>
 
         <div className="space-y-2">
-          <label className="text-sm font-medium text-slate-700" htmlFor="termLabel">
+          <label className="text-sm font-medium text-neutral-700 dark:text-neutral-200" htmlFor="termLabel">
             Term Label
           </label>
           <input
             id="termLabel"
             name="termLabel"
             defaultValue={initialValues.termLabel}
-            className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-pine focus:ring-2 focus:ring-pine/20"
+            className="w-full rounded-2xl border border-neutral-200 px-4 py-3 text-sm outline-none transition focus:border-primary-400 focus:ring-2 focus:ring-primary-100 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:focus:border-primary-500 dark:focus:ring-primary-500/20"
             placeholder="Fall 2026"
           />
         </div>
@@ -118,7 +128,7 @@ export function ClassForm({ mode, classId, initialValues = emptyClassValues }: C
         />
         <Link
           href={mode === "edit" && classId ? `/dashboard/classes/${classId}` : "/dashboard/classes"}
-          className="rounded-full border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-400"
+          className="rounded-full border border-neutral-200 px-5 py-3 text-sm font-semibold text-neutral-800 transition hover:border-neutral-300 dark:border-neutral-700 dark:text-neutral-100 dark:hover:border-neutral-600"
         >
           Cancel
         </Link>

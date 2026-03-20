@@ -53,15 +53,6 @@ MATRIX = [
         ],
     },
     {
-        "id": "procedural_success_weak_reasoning",
-        "label": "Procedural success but weak conceptual reasoning",
-        "methods": [
-            "Concept Mapping",
-            "Conceptual Questions",
-            "Peer Explanation Activities",
-        ],
-    },
-    {
         "id": "low_retention",
         "label": "Low retention of previously taught material",
         "methods": [
@@ -72,7 +63,7 @@ MATRIX = [
     },
     {
         "id": "wide_performance_gap",
-        "label": "Wide performance gap among students",
+        "label": "Mixed class performance that may need targeted differentiation",
         "methods": [
             "Flexible Grouping",
             "Tiered Problem Sets",
@@ -86,17 +77,17 @@ MATRIX = [
     },
     {
         "id": "low_participation",
-        "label": "Low student participation in class discussions",
+        "label": "Low student participation during the assessment cycle",
         "methods": ["Think-Pair-Share", "Polling Questions", "Small Group Discussion"],
     },
     {
         "id": "confused_low_confidence",
-        "label": "Students appear confused but lack confidence to respond",
+        "label": "Students appear unsure and low in confidence",
         "methods": ["Peer Instruction", "Collaborative Learning", "Supportive Questioning"],
     },
     {
         "id": "confident_but_poor",
-        "label": "Students confident but performing poorly",
+        "label": "Students confident but performing below expectations",
         "methods": [
             "Concept Tests",
             "Misconception Diagnosis Activities",
@@ -105,7 +96,7 @@ MATRIX = [
     },
     {
         "id": "application_struggle",
-        "label": "Students understand basic concepts but struggle with application",
+        "label": "Students struggle to apply the concept in context",
         "methods": [
             "Problem-Based Learning",
             "Case-Based Learning",
@@ -114,7 +105,7 @@ MATRIX = [
     },
     {
         "id": "quick_mastery",
-        "label": "Students quickly mastering material",
+        "label": "Students are quickly mastering the material",
         "methods": [
             "Inquiry-Based Projects",
             "Advanced Problem Challenges",
@@ -123,23 +114,13 @@ MATRIX = [
     },
     {
         "id": "uneven_concept_understanding",
-        "label": "Uneven understanding of specific concepts",
+        "label": "Diagnostic evidence suggests uneven understanding",
         "methods": ["Diagnostic Concept Checks", "Focused Mini-Lessons", "Small Group Remediation"],
     },
     {
-        "id": "surface_memorization",
-        "label": "Surface-level memorization without deep learning",
-        "methods": ["Inquiry-Based Learning", "Socratic Questioning", "Concept Mapping"],
-    },
-    {
         "id": "disengaged",
-        "label": "Students disengaged or losing attention",
+        "label": "Students appeared disengaged or off task",
         "methods": ["Interactive Simulations", "Collaborative Activities", "Class Discussions"],
-    },
-    {
-        "id": "connecting_ideas_struggle",
-        "label": "Students struggling to connect ideas across topics",
-        "methods": ["Concept Mapping", "Synthesis Exercises", "Cumulative Problem Sets"],
     },
 ]
 
@@ -147,19 +128,11 @@ MATRIX = [
 def detect_pattern_ids(payload: dict[str, Any]) -> list[str]:
     ids: list[str] = []
     average_score = payload.get("average_score")
+    average_confidence = payload.get("average_confidence")
+    participation_rate = payload.get("participation_rate")
     confidence_mismatch = bool(payload.get("confidence_mismatch"))
-    understanding_bands = payload.get("understanding_bands", [])
-    concept_summary = payload.get("concept_summary", [])
-    note_text = str(payload.get("notes", "")).lower()
-
-    low_band = next(
-        (int(item["count"]) for item in understanding_bands if item["label"] == "Low"),
-        0,
-    )
-    high_band = next(
-        (int(item["count"]) for item in understanding_bands if item["label"] == "High"),
-        0,
-    )
+    note_text = str(payload.get("teacher_observation", "")).lower()
+    assessment_type = str(payload.get("assessment_type", ""))
 
     if average_score is not None and float(average_score) < 60:
         ids.append("widespread_conceptual_misunderstanding")
@@ -167,26 +140,23 @@ def detect_pattern_ids(payload: dict[str, Any]) -> list[str]:
     if average_score is not None and float(average_score) < 50:
         ids.append("foundational_struggle")
 
-    if low_band > 0 and high_band > 0:
+    if average_score is not None and 60 <= float(average_score) < 75:
         ids.append("wide_performance_gap")
 
     if confidence_mismatch:
         ids.append("confident_but_poor")
 
+    if average_confidence is not None and float(average_confidence) <= 2.5:
+        ids.append("confused_low_confidence")
+
+    if participation_rate is not None and float(participation_rate) < 60:
+        ids.append("low_participation")
+
     if average_score is not None and float(average_score) >= 85:
         ids.append("quick_mastery")
 
-    if len(concept_summary) > 1:
-        best = float(concept_summary[0]["score"])
-        weakest = float(concept_summary[-1]["score"])
-        if best - weakest >= 15:
-            ids.append("uneven_concept_understanding")
-
-    if any(term in note_text for term in ["hesitant", "uncertain", "low confidence", "nervous"]):
-        ids.append("confused_low_confidence")
-
-    if any(term in note_text for term in ["quiet", "few students", "limited participation", "low participation"]):
-        ids.append("low_participation")
+    if assessment_type == "diagnostic_check" and average_score is not None and float(average_score) < 70:
+        ids.append("uneven_concept_understanding")
 
     if any(term in note_text for term in ["disengaged", "attention", "off task"]):
         ids.append("disengaged")

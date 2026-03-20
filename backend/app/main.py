@@ -60,4 +60,4 @@ def generate_recommendations(payload: dict[str, object]) -> list[dict[str, str]]
 
 @app.post("/ai/summary", response_model=AISummaryResponse)
 def summarize_analysis(payload: AISummaryRequest) -> dict[str, object]:
-    return generate_ai_summary(payload.model_dump())
+    return generate_ai_summary(payload.model_dump(mode="json"))

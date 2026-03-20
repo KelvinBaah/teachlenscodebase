@@ -4,10 +4,10 @@ import { revalidatePath } from "next/cache";
 
 import {
   type AssessmentRecord,
-  buildRawAssessmentPath,
   getRetentionExpiryDate,
-  parseAssessmentCsv,
+  normalizeAssessmentRecord,
   parseAssessmentFormData,
+  shouldRetryAssessmentWithLegacySchema,
 } from "@/lib/assessments";
 import { analyzeAssessment } from "@/lib/analytics";
 import { buildRecommendations } from "@/lib/recommendations";
@@ -17,11 +17,11 @@ import { getAuthenticatedContext } from "../actions";
 export type AssessmentActionState = {
   error?: string;
   success?: string;
+  createdAssessmentId?: string;
+  recommendationsAvailable?: boolean;
 };
 
-const rawUploadRetentionDays = Number(process.env.RAW_UPLOAD_RETENTION_DAYS ?? "30");
 const detailRecordRetentionDays = Number(process.env.DETAIL_RECORD_RETENTION_DAYS ?? "365");
-const rawUploadBucket = process.env.SUPABASE_STORAGE_BUCKET_RAW_UPLOADS ?? "raw-assessments";
 
 export async function createAssessmentAction(
   classId: string,
@@ -38,79 +38,81 @@ export async function createAssessmentAction(
     return { error: parsed.error };
   }
 
-  const file = formData.get("rawCsv");
-  let scoreSummary = parsed.data.score_summary;
-  let conceptSummary = parsed.data.concept_summary;
-  let rawFilePath: string | null = null;
-  let rawUploadExpiresAt: string | null = null;
-
-  if (parsed.inputMethod === "csv") {
-    if (!(file instanceof File) || file.size === 0) {
-      return { error: "Upload a CSV file when using CSV input." };
-    }
-
-    if (!file.name.toLowerCase().endsWith(".csv")) {
-      return { error: "CSV uploads must use a .csv file." };
-    }
-
-    const csvText = await file.text();
-    const parsedCsv = parseAssessmentCsv(csvText);
-
-    if (!parsedCsv.success) {
-      return { error: parsedCsv.error };
-    }
-
-    scoreSummary = parsedCsv.data.score_summary ?? scoreSummary;
-    conceptSummary = parsedCsv.data.concept_summary ?? conceptSummary;
-    rawUploadExpiresAt = getRetentionExpiryDate(rawUploadRetentionDays);
-
-    const storagePath = buildRawAssessmentPath(context.user.id, classId, file.name);
-    const fileBuffer = Buffer.from(await file.arrayBuffer());
-
-    const { error: uploadError } = await context.supabase.storage
-      .from(rawUploadBucket)
-      .upload(storagePath, fileBuffer, {
-        contentType: file.type || "text/csv",
-        upsert: false,
-      });
-
-    if (uploadError) {
-      return {
-        error:
-          `${uploadError.message}. Confirm the raw-assessments bucket and storage policies are set up.`,
-      };
-    }
-
-    rawFilePath = storagePath;
-  }
-
   const assessmentPayload = {
     teacher_id: context.user.id,
     class_id: classId,
     ...parsed.data,
-    score_summary: scoreSummary,
-    concept_summary: conceptSummary,
-    raw_file_path: rawFilePath,
-    raw_upload_expires_at: rawUploadExpiresAt,
+    raw_file_path: null,
+    raw_upload_expires_at: null,
     retention_category: "assessment_detail",
     expires_at: getRetentionExpiryDate(detailRecordRetentionDays),
   };
 
-  const { data: insertedAssessment, error } = await context.supabase
+  const primaryInsert = await context.supabase
     .from("assessments")
     .insert(assessmentPayload)
-    .select(
-      "id, title, assessment_date, assessment_type, topic, average_score, score_summary, concept_summary, teacher_note, confidence_summary, raw_file_path, raw_upload_expires_at, retention_category, expires_at, created_at",
-    )
+    .select("*")
     .single();
 
-  if (error || !insertedAssessment) {
-    return { error: error?.message ?? "Unable to save assessment." };
+  let insertedAssessment = primaryInsert.data;
+  let error = primaryInsert.error;
+
+  if ((error || !insertedAssessment) && error?.message && shouldRetryAssessmentWithLegacySchema(error.message)) {
+    const legacyPayload = {
+      teacher_id: context.user.id,
+      class_id: classId,
+      title: parsed.data.title,
+      assessment_date: parsed.data.assessment_date,
+      assessment_type: parsed.data.assessment_type,
+      topic: parsed.data.topic,
+      average_score: parsed.data.average_score,
+      teacher_note: parsed.data.teacher_observation,
+      confidence_summary:
+        parsed.data.average_confidence !== null ? String(parsed.data.average_confidence) : null,
+      score_summary: {
+        participation_rate: parsed.data.participation_rate,
+        current_teaching_method: parsed.data.current_teaching_method,
+      },
+      raw_file_path: null,
+      retention_category: "assessment_detail",
+      expires_at: getRetentionExpiryDate(detailRecordRetentionDays),
+    };
+
+    const legacyInsert = await context.supabase
+      .from("assessments")
+      .insert(legacyPayload)
+      .select("*")
+      .single();
+
+    insertedAssessment = legacyInsert.data;
+    error = legacyInsert.error;
   }
 
-  const createdAssessment = insertedAssessment as AssessmentRecord;
+  if (error || !insertedAssessment) {
+    return {
+      error:
+        error?.message ??
+        "Unable to save assessment. If the problem continues, run the latest Supabase migration for simplified assessment fields.",
+    };
+  }
+
+  const createdAssessment = normalizeAssessmentRecord(insertedAssessment) as AssessmentRecord;
   const analysis = analyzeAssessment(createdAssessment);
   const generatedRecommendations = buildRecommendations(createdAssessment, analysis);
+
+  if (createdAssessment.current_teaching_method) {
+    await context.supabase.from("teaching_method_logs").insert({
+      teacher_id: context.user.id,
+      class_id: classId,
+      assessment_id: createdAssessment.id,
+      log_date: createdAssessment.assessment_date,
+      method_used: createdAssessment.current_teaching_method,
+      reflection_note: "Method in place before this assessment.",
+      was_recommended: false,
+      retention_category: "teaching_method_detail",
+      expires_at: getRetentionExpiryDate(detailRecordRetentionDays),
+    });
+  }
 
   if (generatedRecommendations.length > 0) {
     const recommendationRows = generatedRecommendations.map((item) => ({
@@ -128,5 +130,9 @@ export async function createAssessmentAction(
   }
 
   revalidatePath(`/dashboard/classes/${classId}`);
-  return { success: "Assessment added." };
+  return {
+    success: "Assessment added. Loading recommendations...",
+    createdAssessmentId: createdAssessment.id,
+    recommendationsAvailable: generatedRecommendations.length > 0,
+  };
 }

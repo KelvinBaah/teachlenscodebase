@@ -1,9 +1,8 @@
 export const assessmentTypeOptions = [
   "quiz",
   "assignment",
-  "exit ticket",
-  "concept test",
-  "diagnostic check",
+  "diagnostic_check",
+  "exit_ticket",
 ] as const;
 
 export type AssessmentRecord = {
@@ -13,10 +12,10 @@ export type AssessmentRecord = {
   assessment_type: string;
   topic: string | null;
   average_score: number | null;
-  score_summary: Record<string, number> | null;
-  concept_summary: Record<string, number> | null;
-  teacher_note: string | null;
-  confidence_summary: string | null;
+  average_confidence: number | null;
+  participation_rate: number | null;
+  current_teaching_method: string | null;
+  teacher_observation: string | null;
   raw_file_path: string | null;
   raw_upload_expires_at: string | null;
   retention_category: string;
@@ -30,417 +29,151 @@ export type ParsedAssessmentInput = {
   assessment_type: string;
   topic: string | null;
   average_score: number | null;
-  score_summary: Record<string, number> | null;
-  concept_summary: Record<string, number> | null;
-  teacher_note: string | null;
-  confidence_summary: string | null;
+  average_confidence: number | null;
+  participation_rate: number | null;
+  current_teaching_method: string | null;
+  teacher_observation: string | null;
 };
 
-export function parseKeyValueLines(
-  source: string,
-  options?: { acceptedKeys?: string[]; valueLabel?: string },
-) {
-  const trimmed = source.trim();
+type AssessmentRecordLike = Record<string, unknown>;
 
-  if (!trimmed) {
-    return { success: true as const, data: null };
-  }
-
-  const entries = trimmed
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  const result: Record<string, number> = {};
-
-  for (const entry of entries) {
-    const separatorIndex = entry.indexOf(":");
-    if (separatorIndex === -1) {
-      return {
-        success: false as const,
-        error: `Use "label: value" format for ${options?.valueLabel ?? "summary lines"}.`,
-      };
-    }
-
-    const key = entry.slice(0, separatorIndex).trim();
-    const rawValue = entry.slice(separatorIndex + 1).trim();
-    const value = Number(rawValue);
-
-    if (!key || Number.isNaN(value)) {
-      return {
-        success: false as const,
-        error: `Each ${options?.valueLabel ?? "summary"} line needs a label and numeric value.`,
-      };
-    }
-
-    if (options?.acceptedKeys && !options.acceptedKeys.includes(key.toLowerCase())) {
-      return {
-        success: false as const,
-        error: `Allowed labels are: ${options.acceptedKeys.join(", ")}.`,
-      };
-    }
-
-    result[key] = value;
-  }
-
-  return { success: true as const, data: result };
+export function formatAssessmentTypeLabel(type: string) {
+  return type
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
-const conceptHeaderAliases = ["concept", "concept_name", "topic", "skill", "standard"];
-const masteryHeaderAliases = [
-  "mastery",
-  "mastery_value",
-  "score",
-  "percent",
-  "percentage",
-  "value",
-];
-const distributionLabelAliases = ["band", "label", "range", "bucket", "level"];
-const distributionValueAliases = ["count", "students", "value", "total", "frequency", "number"];
-const distributionLabelHints = [
-  "low",
-  "medium",
-  "high",
-  "emerging",
-  "developing",
-  "approaching",
-  "strong",
-  "proficient",
-  "struggling",
-];
-
-function normalizeCsvCell(value: string) {
-  return value.replace(/^\uFEFF/, "").replace(/^"|"$/g, "").trim();
-}
-
-function normalizeCsvHeader(value: string) {
-  return normalizeCsvCell(value).toLowerCase().replace(/[\s-]+/g, "_");
-}
-
-function detectDelimiter(headerLine: string) {
-  const candidates = [",", ";", "\t"];
-  let bestDelimiter = ",";
-  let bestScore = -1;
-
-  for (const delimiter of candidates) {
-    const score = headerLine.split(delimiter).length;
-    if (score > bestScore) {
-      bestScore = score;
-      bestDelimiter = delimiter;
-    }
-  }
-
-  return bestDelimiter;
-}
-
-function parseCsvRows(text: string) {
-  const rows = text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  if (rows.length === 0) {
-    return { success: false as const, error: "CSV files need at least one row of data." };
-  }
-
-  const delimiter = detectDelimiter(rows[0]);
-  const parsedRows = rows.map((row) => row.split(delimiter).map((cell) => normalizeCsvCell(cell)));
-  return { success: true as const, rows: parsedRows };
-}
-
-function findHeaderIndex(headers: string[], aliases: string[]) {
-  return headers.findIndex((header) => aliases.includes(header));
-}
-
-function looksLikeDistributionLabel(value: string) {
-  return distributionLabelHints.includes(value.toLowerCase());
-}
-
-function isNumericCell(value: string) {
-  return value !== "" && !Number.isNaN(Number(value));
-}
-
-function hasAnyNumericCell(row: string[]) {
-  return row.some(isNumericCell);
-}
-
-function inferPairsFromRows(rows: string[][]) {
-  const pairs: Array<{ label: string; value: number }> = [];
-
-  for (const row of rows) {
-    const label = row.find((cell) => cell && !isNumericCell(cell)) ?? "";
-    const numericCell = row.find(isNumericCell);
-
-    if (!label || !numericCell) {
-      continue;
-    }
-
-    pairs.push({ label, value: Number(numericCell) });
-  }
-
-  return pairs;
-}
-
-function inferWideSummary(headers: string[], rows: string[][]) {
-  const numericColumnIndexes = headers
-    .map((header, index) => ({ header, index }))
-    .filter(({ header, index }) => {
-      if (!header) {
-        return false;
-      }
-
-      const normalized = normalizeCsvHeader(header);
-      if (["student", "student_name", "name", "id", "student_id"].includes(normalized)) {
-        return false;
-      }
-
-      return rows.some((row) => isNumericCell(row[index] ?? ""));
-    });
-
-  if (numericColumnIndexes.length === 0) {
+function parseNullableNumber(value: unknown) {
+  if (value === null || value === undefined || value === "") {
     return null;
   }
 
-  const conceptSummary: Record<string, number> = {};
-
-  for (const { header, index } of numericColumnIndexes) {
-    const numericValues = rows
-      .map((row) => row[index] ?? "")
-      .filter(isNumericCell)
-      .map((value) => Number(value));
-
-    if (numericValues.length === 0) {
-      continue;
-    }
-
-    const average =
-      numericValues.reduce((sum, value) => sum + value, 0) / numericValues.length;
-    conceptSummary[header] = Number(average.toFixed(2));
-  }
-
-  return Object.keys(conceptSummary).length > 0 ? conceptSummary : null;
+  const parsed = Number(value);
+  return Number.isNaN(parsed) ? null : parsed;
 }
 
-function inferColumnAverages(rows: string[][]) {
-  const maxColumns = Math.max(...rows.map((row) => row.length));
-  const conceptSummary: Record<string, number> = {};
-
-  for (let index = 0; index < maxColumns; index += 1) {
-    const numericValues = rows
-      .map((row) => row[index] ?? "")
-      .filter(isNumericCell)
-      .map((value) => Number(value));
-
-    if (numericValues.length === 0) {
-      continue;
-    }
-
-    const average =
-      numericValues.reduce((sum, value) => sum + value, 0) / numericValues.length;
-    conceptSummary[`Column ${index + 1}`] = Number(average.toFixed(2));
+function readLegacyScoreSummaryValue(
+  scoreSummary: unknown,
+  key: "participation_rate" | "current_teaching_method",
+) {
+  if (!scoreSummary || typeof scoreSummary !== "object" || Array.isArray(scoreSummary)) {
+    return null;
   }
 
-  return Object.keys(conceptSummary).length > 0 ? conceptSummary : null;
+  const value = (scoreSummary as Record<string, unknown>)[key];
+  return value ?? null;
 }
 
-export function parseAssessmentCsv(text: string) {
-  const parsedRows = parseCsvRows(text);
+export function normalizeAssessmentRecord(record: AssessmentRecordLike): AssessmentRecord {
+  const scoreSummary = record.score_summary;
+  const averageConfidence =
+    parseNullableNumber(record.average_confidence) ??
+    parseNullableNumber(record.confidence_summary);
+  const participationRate =
+    parseNullableNumber(record.participation_rate) ??
+    parseNullableNumber(readLegacyScoreSummaryValue(scoreSummary, "participation_rate"));
+  const currentTeachingMethod =
+    typeof record.current_teaching_method === "string"
+      ? record.current_teaching_method
+      : typeof readLegacyScoreSummaryValue(scoreSummary, "current_teaching_method") === "string"
+        ? String(readLegacyScoreSummaryValue(scoreSummary, "current_teaching_method"))
+        : null;
+  const teacherObservation =
+    typeof record.teacher_observation === "string"
+      ? record.teacher_observation
+      : typeof record.teacher_note === "string"
+        ? record.teacher_note
+        : null;
 
-  if (!parsedRows.success) {
-    return parsedRows;
+  return {
+    id: String(record.id ?? ""),
+    title: String(record.title ?? ""),
+    assessment_date: String(record.assessment_date ?? ""),
+    assessment_type: String(record.assessment_type ?? ""),
+    topic: typeof record.topic === "string" ? record.topic : null,
+    average_score: parseNullableNumber(record.average_score),
+    average_confidence: averageConfidence,
+    participation_rate: participationRate,
+    current_teaching_method: currentTeachingMethod,
+    teacher_observation: teacherObservation,
+    raw_file_path: typeof record.raw_file_path === "string" ? record.raw_file_path : null,
+    raw_upload_expires_at:
+      typeof record.raw_upload_expires_at === "string" ? record.raw_upload_expires_at : null,
+    retention_category:
+      typeof record.retention_category === "string" ? record.retention_category : "assessment_detail",
+    expires_at: typeof record.expires_at === "string" ? record.expires_at : null,
+    created_at: typeof record.created_at === "string" ? record.created_at : "",
+  };
+}
+
+export function shouldRetryAssessmentWithLegacySchema(errorMessage: string) {
+  const normalized = errorMessage.toLowerCase();
+  return [
+    "average_confidence",
+    "participation_rate",
+    "current_teaching_method",
+    "teacher_observation",
+    "raw_upload_expires_at",
+    "schema cache",
+  ].some((term) => normalized.includes(term));
+}
+
+function parsePercentageOrDecimal(rawValue: string) {
+  const trimmed = rawValue.trim().replace("%", "");
+  if (!trimmed) {
+    return { success: true as const, value: null };
   }
 
-  const [firstRow, ...remainingRows] = parsedRows.rows;
-  const normalizedHeaders = firstRow.map((header) => normalizeCsvHeader(header));
-  const conceptIndex = findHeaderIndex(normalizedHeaders, conceptHeaderAliases);
-  const masteryIndex = findHeaderIndex(normalizedHeaders, masteryHeaderAliases);
-  const labelIndex = findHeaderIndex(normalizedHeaders, distributionLabelAliases);
-  const valueIndex = findHeaderIndex(normalizedHeaders, distributionValueAliases);
-  const hasRecognizedHeader =
-    (conceptIndex !== -1 && masteryIndex !== -1) || (labelIndex !== -1 && valueIndex !== -1);
-  const dataRows = hasRecognizedHeader ? remainingRows : parsedRows.rows;
-
-  if (dataRows.length === 0) {
+  const parsed = Number(trimmed);
+  if (Number.isNaN(parsed) || parsed < 0) {
     return {
       success: false as const,
-      error: "CSV files need at least one usable data row.",
+      error: "Participation rate must be a positive percentage or decimal.",
     };
   }
 
-  if (conceptIndex !== -1 && masteryIndex !== -1) {
-    const conceptSummary: Record<string, number> = {};
-
-    for (const row of dataRows) {
-      const concept = row[conceptIndex];
-      const value = Number(row[masteryIndex]);
-
-      if (!concept || Number.isNaN(value)) {
-        return {
-          success: false as const,
-          error: 'Concept CSV rows must use "concept, mastery_value" style columns with numeric values.',
-        };
-      }
-
-      conceptSummary[concept] = value;
-    }
-
-    return {
-      success: true as const,
-      data: { concept_summary: conceptSummary, score_summary: null as Record<string, number> | null },
-    };
+  if (parsed <= 1) {
+    return { success: true as const, value: Number((parsed * 100).toFixed(2)) };
   }
 
-  if (labelIndex !== -1 && valueIndex !== -1) {
-    const scoreSummary: Record<string, number> = {};
-
-    for (const row of dataRows) {
-      const label = row[labelIndex];
-      const value = Number(row[valueIndex]);
-
-      if (!label || Number.isNaN(value)) {
-        return {
-          success: false as const,
-          error: 'Distribution CSV rows must use "band, count" or "label, value" columns with numeric values.',
-        };
-      }
-
-      scoreSummary[label] = value;
-    }
-
-    return {
-      success: true as const,
-      data: { concept_summary: null as Record<string, number> | null, score_summary: scoreSummary },
-    };
-  }
-
-  const usableRows = dataRows.filter((row) => row.length >= 2);
-
-  if (usableRows.length > 0) {
-    const firstLabel = usableRows[0][0];
-    const allNumericSecondColumn = usableRows.every((row) => !Number.isNaN(Number(row[1])));
-
-    if (firstLabel && allNumericSecondColumn) {
-      if (looksLikeDistributionLabel(firstLabel)) {
-        const scoreSummary: Record<string, number> = {};
-
-        for (const row of usableRows) {
-          const label = row[0];
-          const value = Number(row[1]);
-
-          if (!label || Number.isNaN(value)) {
-            return {
-              success: false as const,
-              error: "Each distribution row needs a label and numeric value.",
-            };
-          }
-
-          scoreSummary[label] = value;
-        }
-
-        return {
-          success: true as const,
-          data: {
-            concept_summary: null as Record<string, number> | null,
-            score_summary: scoreSummary,
-          },
-        };
-      }
-
-      const conceptSummary: Record<string, number> = {};
-
-      for (const row of usableRows) {
-        const concept = row[0];
-        const value = Number(row[1]);
-
-        if (!concept || Number.isNaN(value)) {
-          return {
-            success: false as const,
-            error: "Each concept row needs a concept label and numeric value.",
-          };
-        }
-
-        conceptSummary[concept] = value;
-      }
-
-      return {
-        success: true as const,
-        data: {
-          concept_summary: conceptSummary,
-          score_summary: null as Record<string, number> | null,
-        },
-      };
-    }
-  }
-
-  const pairRows = inferPairsFromRows(dataRows.filter(hasAnyNumericCell));
-  if (pairRows.length > 0) {
-    const looksLikeDistribution = pairRows.every((pair) => looksLikeDistributionLabel(pair.label));
-
-    if (looksLikeDistribution) {
-      return {
-        success: true as const,
-        data: {
-          concept_summary: null as Record<string, number> | null,
-          score_summary: Object.fromEntries(
-            pairRows.map((pair) => [pair.label, pair.value]),
-          ),
-        },
-      };
-    }
-
-    return {
-      success: true as const,
-      data: {
-        concept_summary: Object.fromEntries(
-          pairRows.map((pair) => [pair.label, pair.value]),
-        ),
-        score_summary: null as Record<string, number> | null,
-      },
-    };
-  }
-
-  if (remainingRows.length > 0) {
-    const wideSummary = inferWideSummary(firstRow, remainingRows);
-    if (wideSummary) {
-      return {
-        success: true as const,
-        data: {
-          concept_summary: wideSummary,
-          score_summary: null as Record<string, number> | null,
-        },
-      };
-    }
-  }
-
-  const columnAverages = inferColumnAverages(dataRows);
-  if (columnAverages) {
-    return {
-      success: true as const,
-      data: {
-        concept_summary: columnAverages,
-        score_summary: null as Record<string, number> | null,
-      },
-    };
+  if (parsed <= 100) {
+    return { success: true as const, value: parsed };
   }
 
   return {
     success: false as const,
-    error:
-      "TeachLens could not interpret this CSV. Try a plain CSV export with at least one numeric column.",
+    error: "Participation rate must be between 0 and 100, or a decimal between 0 and 1.",
   };
 }
 
+function parseOptionalNumber(rawValue: string, options: { min: number; max: number; label: string }) {
+  const trimmed = rawValue.trim();
+  if (!trimmed) {
+    return { success: true as const, value: null };
+  }
+
+  const parsed = Number(trimmed);
+  if (Number.isNaN(parsed) || parsed < options.min || parsed > options.max) {
+    return {
+      success: false as const,
+      error: `${options.label} must be a number between ${options.min} and ${options.max}.`,
+    };
+  }
+
+  return { success: true as const, value: parsed };
+}
+
 export function parseAssessmentFormData(formData: FormData) {
-  const inputMethod = String(formData.get("inputMethod") ?? "manual");
   const title = String(formData.get("title") ?? "").trim();
   const assessmentDate = String(formData.get("assessmentDate") ?? "").trim();
   const assessmentType = String(formData.get("assessmentType") ?? "").trim();
-  const topic = String(formData.get("topic") ?? "").trim();
+  const topic = String(formData.get("topicOrConcept") ?? "").trim();
   const averageScoreInput = String(formData.get("averageScore") ?? "").trim();
-  const teacherNote = String(formData.get("teacherNote") ?? "").trim();
-  const confidenceSummary = String(formData.get("confidenceSummary") ?? "").trim();
-  const scoreSummaryText = String(formData.get("scoreSummaryText") ?? "").trim();
-  const conceptSummaryText = String(formData.get("conceptSummaryText") ?? "").trim();
+  const averageConfidenceInput = String(formData.get("averageConfidence") ?? "").trim();
+  const participationRateInput = String(formData.get("participationRate") ?? "").trim();
+  const currentTeachingMethod = String(formData.get("currentTeachingMethod") ?? "").trim();
+  const teacherObservation = String(formData.get("teacherObservation") ?? "").trim();
 
   if (!title) {
     return { success: false as const, error: "Assessment title is required." };
@@ -454,49 +187,43 @@ export function parseAssessmentFormData(formData: FormData) {
     return { success: false as const, error: "Choose a supported assessment type." };
   }
 
-  let averageScore: number | null = null;
-  if (averageScoreInput) {
-    const parsedAverage = Number(averageScoreInput);
-    if (Number.isNaN(parsedAverage) || parsedAverage < 0 || parsedAverage > 100) {
-      return { success: false as const, error: "Average score must be a number between 0 and 100." };
-    }
-    averageScore = parsedAverage;
+  const averageScore = parseOptionalNumber(averageScoreInput, {
+    min: 0,
+    max: 100,
+    label: "Average score",
+  });
+  if (!averageScore.success) {
+    return averageScore;
   }
 
-  const scoreSummary = parseKeyValueLines(scoreSummaryText, {
-    valueLabel: "distribution lines",
+  const averageConfidence = parseOptionalNumber(averageConfidenceInput, {
+    min: 1,
+    max: 5,
+    label: "Average confidence",
   });
-  if (!scoreSummary.success) {
-    return scoreSummary;
+  if (!averageConfidence.success) {
+    return averageConfidence;
   }
 
-  const conceptSummary = parseKeyValueLines(conceptSummaryText, {
-    valueLabel: "concept mastery lines",
-  });
-  if (!conceptSummary.success) {
-    return conceptSummary;
+  const participationRate = parsePercentageOrDecimal(participationRateInput);
+  if (!participationRate.success) {
+    return participationRate;
   }
 
   return {
     success: true as const,
-    inputMethod,
     data: {
       title,
       assessment_date: assessmentDate,
       assessment_type: assessmentType,
       topic: topic || null,
-      average_score: averageScore,
-      score_summary: scoreSummary.data,
-      concept_summary: conceptSummary.data,
-      teacher_note: teacherNote || null,
-      confidence_summary: confidenceSummary || null,
+      average_score: averageScore.value,
+      average_confidence: averageConfidence.value,
+      participation_rate: participationRate.value,
+      current_teaching_method: currentTeachingMethod || null,
+      teacher_observation: teacherObservation || null,
     } satisfies ParsedAssessmentInput,
   };
-}
-
-export function buildRawAssessmentPath(userId: string, classId: string, filename: string) {
-  const safeFilename = filename.replace(/[^a-zA-Z0-9._-]/g, "-").toLowerCase();
-  return `${userId}/${classId}/${Date.now()}-${safeFilename}`;
 }
 
 export function getRetentionExpiryDate(retentionDays: number) {

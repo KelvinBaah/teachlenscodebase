@@ -3,33 +3,7 @@ from typing import Any
 
 def infer_understanding_bands(
     average_score: float | None,
-    score_summary: dict[str, Any] | None,
 ) -> list[dict[str, int | str]]:
-    if score_summary:
-        normalized = {str(key).lower(): int(value) for key, value in score_summary.items()}
-
-        return [
-            {
-                "label": "Low",
-                "count": sum(
-                    normalized.get(alias, 0) for alias in ["low", "emerging", "struggling"]
-                ),
-            },
-            {
-                "label": "Medium",
-                "count": sum(
-                    normalized.get(alias, 0)
-                    for alias in ["medium", "developing", "approaching"]
-                ),
-            },
-            {
-                "label": "High",
-                "count": sum(
-                    normalized.get(alias, 0) for alias in ["high", "strong", "proficient"]
-                ),
-            },
-        ]
-
     if average_score is None:
         return []
 
@@ -54,39 +28,21 @@ def infer_understanding_bands(
     ]
 
 
-def infer_concept_summary(
-    concept_summary: dict[str, Any] | None,
-) -> list[dict[str, float | str]]:
-    if not concept_summary:
-        return []
-
-    return sorted(
-        [
-            {"concept": str(concept), "score": float(score)}
-            for concept, score in concept_summary.items()
-        ],
-        key=lambda item: item["score"],
-        reverse=True,
-    )
-
-
 def detect_confidence_mismatch(
     average_score: float | None,
-    confidence_summary: str | None,
+    average_confidence: float | None,
 ) -> bool:
-    if average_score is None or not confidence_summary:
+    if average_score is None or average_confidence is None:
         return False
 
-    normalized = confidence_summary.lower()
-    confidence_signals = ["confident", "very sure", "felt strong", "high confidence"]
-
-    return any(signal in normalized for signal in confidence_signals) and average_score < 70
+    return average_confidence >= 4 and average_score < 70
 
 
 def detect_learning_patterns(
     average_score: float | None,
-    concept_metrics: list[dict[str, float | str]],
-    understanding_bands: list[dict[str, int | str]],
+    average_confidence: float | None,
+    participation_rate: float | None,
+    teacher_observation: str | None,
     confidence_mismatch: bool,
 ) -> list[str]:
     patterns: list[str] = []
@@ -101,32 +57,20 @@ def detect_learning_patterns(
         else:
             patterns.append("Class understanding is generally strong.")
 
-    low_band = next(
-        (int(band["count"]) for band in understanding_bands if band["label"] == "Low"),
-        0,
-    )
-    high_band = next(
-        (int(band["count"]) for band in understanding_bands if band["label"] == "High"),
-        0,
-    )
+    if participation_rate is not None and participation_rate < 60:
+        patterns.append("Participation was lower than expected for this assessment.")
 
-    if low_band > 0 and high_band > 0:
-        patterns.append("Performance appears uneven across the class.")
-
-    if len(concept_metrics) > 1:
-        best = float(concept_metrics[0]["score"])
-        weakest = float(concept_metrics[-1]["score"])
-        weakest_concept = str(concept_metrics[-1]["concept"])
-
-        if best - weakest >= 15:
-            patterns.append(
-                f"Concept mastery varies across topics, especially around {weakest_concept}."
-            )
+    if average_confidence is not None and average_confidence <= 2.5:
+        patterns.append("Students reported low confidence during this assessment cycle.")
 
     if confidence_mismatch:
         patterns.append(
             "Students may feel confident while still performing below expectations."
         )
+
+    observation = (teacher_observation or "").lower()
+    if any(term in observation for term in ["disengaged", "off task", "attention"]):
+        patterns.append("Students appeared disengaged during this assessment cycle.")
 
     return patterns[:4]
 
@@ -137,23 +81,35 @@ def analyze_assessment_record(record: dict[str, Any]) -> dict[str, Any]:
         if record.get("average_score") is not None
         else None
     )
-    score_summary = record.get("score_summary")
-    concept_summary = record.get("concept_summary")
-    confidence_summary = record.get("confidence_summary")
+    average_confidence = (
+        float(record["average_confidence"])
+        if record.get("average_confidence") is not None
+        else None
+    )
+    participation_rate = (
+        float(record["participation_rate"])
+        if record.get("participation_rate") is not None
+        else None
+    )
+    teacher_observation = record.get("teacher_observation")
 
-    understanding_bands = infer_understanding_bands(average_score, score_summary)
-    concept_metrics = infer_concept_summary(concept_summary)
+    understanding_bands = infer_understanding_bands(average_score)
     confidence_mismatch = detect_confidence_mismatch(
-        average_score, confidence_summary
+        average_score, average_confidence
     )
     detected_patterns = detect_learning_patterns(
-        average_score, concept_metrics, understanding_bands, confidence_mismatch
+        average_score,
+        average_confidence,
+        participation_rate,
+        teacher_observation,
+        confidence_mismatch,
     )
 
     return {
         "average_score": average_score,
+        "average_confidence": average_confidence,
+        "participation_rate": participation_rate,
         "understanding_bands": understanding_bands,
-        "concept_summary": concept_metrics,
         "confidence_mismatch": confidence_mismatch,
         "detected_patterns": detected_patterns,
     }

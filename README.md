@@ -2,11 +2,11 @@
 
 TeachLens is a teacher-facing instructional decision-support app for reviewing formative assessment patterns and tracking instructional changes over time.
 
-This repository contains a simple full-stack MVP foundation:
+This repository contains the current TeachLens MVP:
 
 - `frontend`: Next.js + TypeScript + Tailwind CSS
 - `backend`: FastAPI
-- `docs`: lightweight project notes
+- `docs`: lightweight project notes and deployment/setup references
 
 ## Project Structure
 
@@ -76,9 +76,32 @@ Set these in `backend/.env`:
 - `OPENAI_API_KEY`
 - `OPENAI_MODEL`
 
-`RAW_UPLOAD_RETENTION_DAYS` controls raw CSV deletion.
+`RAW_UPLOAD_RETENTION_DAYS` is kept for legacy raw-upload cleanup support.
 `DETAIL_RECORD_RETENTION_DAYS` controls when detailed instructional records can be redacted or deleted.
 `OPENAI_API_KEY` is optional. If it is missing, TeachLens will fall back to a local summary instead of failing.
+
+## Pilot-Ready Workflow
+
+TeachLens is organized around one simple teacher flow:
+
+1. sign in or sign up
+2. create a class
+3. open the class workspace
+4. add a class-level summary assessment
+5. review analytics, recommendations, AI summary, and teaching history
+
+The active assessment workflow collects only:
+
+- assessment title
+- assessment date
+- topic or concept
+- average score
+- average confidence
+- participation rate
+- current teaching method
+- teacher observation
+
+No student-identifiable information should ever be entered.
 
 ## Notes
 
@@ -117,49 +140,61 @@ No student-identifiable records should be added to these tables.
 
 ## Assessment Input Setup
 
-Assessment input now supports both manual entry and a narrow CSV upload flow on each class page.
+Assessment input now uses one simplified class-level summary form for all supported assessment types:
 
-1. Run `supabase/migrations/002_raw_assessment_storage.sql` in Supabase after the core schema migration.
-2. Set `RAW_UPLOAD_RETENTION_DAYS=30` in `frontend/.env.local` if you want a custom retention window for raw CSV uploads.
-3. Set `SUPABASE_STORAGE_BUCKET_RAW_UPLOADS=raw-assessments` in `frontend/.env.local` if you want to override the default bucket name.
+- `quiz`
+- `assignment`
+- `diagnostic_check`
+- `exit_ticket`
 
-Supported CSV formats:
+Each assessment records only:
 
-- Concept mastery:
-  `concept,mastery_value`
-- Distribution summary:
-  `band,count`
+- assessment title
+- assessment date
+- topic or concept
+- average score
+- average confidence
+- participation rate
+- current teaching method
+- teacher observation
 
-Examples:
+This workflow is intentionally class-level only and should never include student names, student IDs, or other student-identifiable data.
 
-```text
-concept,mastery_value
-photosynthesis,82
-cellular respiration,69
-```
+## Frontend Flow
 
-```text
-band,count
-low,8
-medium,14
-high,10
-```
+The frontend is now organized around the actual teacher workflow instead of a dashboard-only showcase:
 
-Manual entry also supports:
+1. Public landing page at `frontend/app/page.tsx`
+   - brief overview
+   - sign in
+   - sign up
+2. Auth pages at `frontend/app/sign-in/page.tsx` and `frontend/app/sign-up/page.tsx`
+   - connected to Supabase email/password auth
+   - redirect authenticated teachers to `/dashboard`
+3. Protected dashboard at `frontend/app/dashboard/page.tsx`
+   - shows the teacher's class list
+   - includes create-class entry points
+   - provides direct access to the latest class workspace
+4. Class creation at `frontend/app/dashboard/classes/new/page.tsx`
+   - uses the existing class form and server action
+5. Class workspace at `frontend/app/dashboard/classes/[classId]/page.tsx`
+   - simplified assessment form
+   - analytics
+   - recommendations
+   - AI summary
+   - teaching method timeline
 
-- distribution lines like `low: 8`
-- concept mastery lines like `photosynthesis: 82`
-
-Raw CSV uploads are intended to be temporary and should never contain student names, IDs, or other personally identifiable student information.
+There are also simple alias routes under `frontend/app/classes` so `/classes`, `/classes/new`, and `/classes/[id]` redirect into the protected app flow.
 
 ## Analytics Notes
 
-The first analytics pass is intentionally descriptive and rule-based:
+The current analytics pass is intentionally descriptive and rule-based:
 
 - average score is taken directly from the assessment record
-- understanding bands are inferred from grouped distribution values or, when needed, from the average score
-- concept mastery is shown only when concept-level values are available
-- confidence mismatch is flagged only when the note suggests high confidence while performance remains below 70
+- average confidence is based on a class-level 1 to 5 summary
+- participation rate is stored as a class-level percentage
+- understanding bands are inferred from the average score
+- confidence mismatch is flagged when confidence is high while performance remains below 70
 - detected patterns are short, transparent summaries rather than hidden model outputs
 
 The backend utility for this session lives in `backend/app/analytics.py`, and the class page visualizations use Recharts in the frontend.
@@ -192,9 +227,9 @@ The main tracker files for this session are:
 
 ## Privacy And Retention
 
-TeachLens now includes a simple retention-friendly cleanup flow:
+TeachLens includes a simple retention-friendly cleanup flow:
 
-- raw CSV uploads are deleted after `RAW_UPLOAD_RETENTION_DAYS`
+- legacy raw upload records are deleted after `RAW_UPLOAD_RETENTION_DAYS` if older data still exists
 - detailed assessment notes can be reduced to aggregate-only records after `DETAIL_RECORD_RETENTION_DAYS`
 - weekly analyses, recommendations, and teaching method logs can be hard-deleted after their retention window
 - the in-app privacy note lives at `frontend/app/dashboard/help/page.tsx`
@@ -208,6 +243,51 @@ python -m app.cleanup_retention
 ```
 
 This command is designed to be scheduled later with cron, GitHub Actions, Railway, Render, or another simple job runner.
+
+## Tests
+
+Frontend lightweight tests:
+
+```bash
+cd frontend
+npm run test
+```
+
+Backend lightweight tests:
+
+```bash
+cd backend
+python -m unittest discover -s tests -p "test_*.py"
+```
+
+## Demo Seed Data
+
+Seed a realistic pilot/demo workspace quickly:
+
+```bash
+cd backend
+python -m app.seed_demo_data
+```
+
+Default seeded teacher:
+
+- email: `demo.teacher@teachlens.local`
+- password: `TeachLensDemo123!`
+
+The seed script creates:
+
+- 3 demo classes
+- 3 assessments per class
+- recommendation rows
+- teaching method log history
+
+## Deployment And Admin Notes
+
+Short operational guides live here:
+
+- deployment: `docs/deployment.md`
+- admin setup: `docs/admin-setup.md`
+- retention notes: `docs/data-retention.md`
 
 ## AI Summary Layer
 

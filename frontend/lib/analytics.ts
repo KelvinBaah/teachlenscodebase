@@ -5,11 +5,6 @@ export type UnderstandingBand = {
   count: number;
 };
 
-export type ConceptMetric = {
-  concept: string;
-  score: number;
-};
-
 export type TrendPoint = {
   date: string;
   averageScore: number;
@@ -18,54 +13,14 @@ export type TrendPoint = {
 
 export type AssessmentAnalysis = {
   averageScore: number | null;
-  scoreDistribution: { label: string; value: number }[];
+  averageConfidence: number | null;
+  participationRate: number | null;
   understandingBands: UnderstandingBand[];
-  conceptMetrics: ConceptMetric[];
   confidenceMismatch: boolean;
   detectedPatterns: string[];
 };
 
-function toDistributionEntries(scoreSummary: AssessmentRecord["score_summary"]) {
-  if (!scoreSummary) {
-    return [];
-  }
-
-  return Object.entries(scoreSummary).map(([label, value]) => ({
-    label,
-    value,
-  }));
-}
-
-function toConceptMetrics(conceptSummary: AssessmentRecord["concept_summary"]) {
-  if (!conceptSummary) {
-    return [];
-  }
-
-  return Object.entries(conceptSummary)
-    .map(([concept, score]) => ({ concept, score }))
-    .sort((a, b) => b.score - a.score);
-}
-
 function inferUnderstandingBands(assessment: AssessmentRecord): UnderstandingBand[] {
-  const distribution = assessment.score_summary;
-
-  if (distribution && Object.keys(distribution).length > 0) {
-    const lowAliases = ["low", "emerging", "struggling"];
-    const mediumAliases = ["medium", "developing", "approaching"];
-    const highAliases = ["high", "strong", "proficient"];
-
-    const pick = (aliases: string[]) =>
-      Object.entries(distribution)
-        .filter(([label]) => aliases.includes(label.toLowerCase()))
-        .reduce((sum, [, value]) => sum + value, 0);
-
-    return [
-      { label: "Low", count: pick(lowAliases) },
-      { label: "Medium", count: pick(mediumAliases) },
-      { label: "High", count: pick(highAliases) },
-    ];
-  }
-
   if (assessment.average_score === null || assessment.average_score === undefined) {
     return [];
   }
@@ -95,56 +50,43 @@ function inferUnderstandingBands(assessment: AssessmentRecord): UnderstandingBan
 
 function detectConfidenceMismatch(
   averageScore: number | null,
-  confidenceSummary: string | null,
+  averageConfidence: number | null,
 ) {
-  if (averageScore === null || !confidenceSummary) {
+  if (averageScore === null || averageConfidence === null) {
     return false;
   }
 
-  const normalized = confidenceSummary.toLowerCase();
-  const signalsHighConfidence = ["confident", "very sure", "felt strong", "high confidence"].some(
-    (signal) => normalized.includes(signal),
-  );
-
-  return signalsHighConfidence && averageScore < 70;
+  return averageConfidence >= 4 && averageScore < 70;
 }
 
-function detectPatterns(
-  averageScore: number | null,
-  conceptMetrics: ConceptMetric[],
-  understandingBands: UnderstandingBand[],
-  confidenceMismatch: boolean,
-) {
+function detectPatterns(assessment: AssessmentRecord, confidenceMismatch: boolean) {
   const patterns: string[] = [];
 
-  if (averageScore !== null) {
-    if (averageScore < 60) {
+  if (assessment.average_score !== null) {
+    if (assessment.average_score < 60) {
       patterns.push("Class understanding is broadly low and may need reteaching.");
-    } else if (averageScore >= 60 && averageScore < 75) {
+    } else if (assessment.average_score < 75) {
       patterns.push("Class understanding is mixed and may need targeted follow-up.");
     } else {
       patterns.push("Class understanding is generally strong.");
     }
   }
 
-  const lowBand = understandingBands.find((band) => band.label === "Low")?.count ?? 0;
-  const highBand = understandingBands.find((band) => band.label === "High")?.count ?? 0;
-
-  if (lowBand > 0 && highBand > 0) {
-    patterns.push("Performance appears uneven across the class.");
+  if (assessment.participation_rate !== null && assessment.participation_rate < 60) {
+    patterns.push("Participation was lower than expected for this assessment.");
   }
 
-  if (conceptMetrics.length > 1) {
-    const best = conceptMetrics[0];
-    const weakest = conceptMetrics[conceptMetrics.length - 1];
-
-    if (best.score - weakest.score >= 15) {
-      patterns.push(`Concept mastery varies across topics, especially around ${weakest.concept}.`);
-    }
+  if (assessment.average_confidence !== null && assessment.average_confidence <= 2.5) {
+    patterns.push("Students reported low confidence during this assessment cycle.");
   }
 
   if (confidenceMismatch) {
     patterns.push("Students may feel confident while still performing below expectations.");
+  }
+
+  const observation = assessment.teacher_observation?.toLowerCase() ?? "";
+  if (["disengaged", "off task", "attention"].some((term) => observation.includes(term))) {
+    patterns.push("Students appeared disengaged during this assessment cycle.");
   }
 
   return patterns.slice(0, 4);
@@ -152,25 +94,17 @@ function detectPatterns(
 
 export function analyzeAssessment(assessment: AssessmentRecord): AssessmentAnalysis {
   const averageScore = assessment.average_score ?? null;
-  const scoreDistribution = toDistributionEntries(assessment.score_summary);
-  const conceptMetrics = toConceptMetrics(assessment.concept_summary);
+  const averageConfidence = assessment.average_confidence ?? null;
+  const participationRate = assessment.participation_rate ?? null;
   const understandingBands = inferUnderstandingBands(assessment);
-  const confidenceMismatch = detectConfidenceMismatch(
-    averageScore,
-    assessment.confidence_summary,
-  );
-  const detectedPatterns = detectPatterns(
-    averageScore,
-    conceptMetrics,
-    understandingBands,
-    confidenceMismatch,
-  );
+  const confidenceMismatch = detectConfidenceMismatch(averageScore, averageConfidence);
+  const detectedPatterns = detectPatterns(assessment, confidenceMismatch);
 
   return {
     averageScore,
-    scoreDistribution,
+    averageConfidence,
+    participationRate,
     understandingBands,
-    conceptMetrics,
     confidenceMismatch,
     detectedPatterns,
   };

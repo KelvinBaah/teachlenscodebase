@@ -22,34 +22,21 @@ Rules:
 
 def build_fallback_summary(payload: dict[str, Any]) -> dict[str, Any]:
     average_score = payload.get("average_score")
+    average_confidence = payload.get("average_confidence")
+    participation_rate = payload.get("participation_rate")
     detected_patterns = payload.get("detected_patterns", [])
     recommendations = payload.get("recommendations", [])
-    understanding_bands = payload.get("understanding_bands", [])
 
     summary_parts: list[str] = []
 
     if average_score is not None:
         summary_parts.append(f"The latest class average is {average_score}.")
 
-    low_band = next(
-        (
-            int(item["count"])
-            for item in understanding_bands
-            if str(item.get("label", "")).lower() == "low"
-        ),
-        0,
-    )
-    high_band = next(
-        (
-            int(item["count"])
-            for item in understanding_bands
-            if str(item.get("label", "")).lower() == "high"
-        ),
-        0,
-    )
+    if average_confidence is not None:
+        summary_parts.append(f"Average confidence was {average_confidence} out of 5.")
 
-    if low_band > 0 and high_band > 0:
-        summary_parts.append("Performance appears uneven across the class.")
+    if participation_rate is not None:
+        summary_parts.append(f"Participation was {participation_rate}% of the class.")
 
     if detected_patterns:
         summary_parts.append(str(detected_patterns[0]))
@@ -122,25 +109,26 @@ def generate_ai_summary(payload: dict[str, Any]) -> dict[str, Any]:
         fallback["error"] = "OpenAI SDK is not installed in the backend environment."
         return fallback
 
-    user_payload = {
-        "class_name": payload.get("class_name"),
-        "assessment_title": payload.get("assessment_title"),
-        "analysis_date": payload.get("analysis_date"),
-        "average_score": payload.get("average_score"),
-        "understanding_bands": payload.get("understanding_bands", []),
-        "concept_summary": payload.get("concept_summary", []),
-        "confidence_mismatch": payload.get("confidence_mismatch", False),
-        "detected_patterns": payload.get("detected_patterns", []),
-        "recommendations": payload.get("recommendations", []),
-    }
-
-    user_prompt = (
-        "Summarize this TeachLens class analysis and explain the already-selected rule-based "
-        "teaching recommendations. Keep the explanation grounded in the provided data only.\n\n"
-        f"{json.dumps(user_payload, ensure_ascii=True)}"
-    )
-
     try:
+        user_payload = {
+            "class_name": payload.get("class_name"),
+            "assessment_title": payload.get("assessment_title"),
+            "analysis_date": payload.get("analysis_date"),
+            "average_score": payload.get("average_score"),
+            "average_confidence": payload.get("average_confidence"),
+            "participation_rate": payload.get("participation_rate"),
+            "understanding_bands": payload.get("understanding_bands", []),
+            "confidence_mismatch": payload.get("confidence_mismatch", False),
+            "detected_patterns": payload.get("detected_patterns", []),
+            "recommendations": payload.get("recommendations", []),
+        }
+
+        user_prompt = (
+            "Summarize this TeachLens class analysis and explain the already-selected rule-based "
+            "teaching recommendations. Keep the explanation grounded in the provided data only.\n\n"
+            f"{json.dumps(user_payload, ensure_ascii=True, default=str)}"
+        )
+
         client = OpenAI(api_key=settings.openai_api_key)
         response = client.responses.create(
             model=settings.openai_model,

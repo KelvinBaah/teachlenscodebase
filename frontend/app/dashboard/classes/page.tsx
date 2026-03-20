@@ -8,8 +8,8 @@ export default async function ClassesPage() {
 
   if (!supabase) {
     return (
-      <section className="rounded-[28px] border border-amber-200 bg-amber-50 p-8 text-amber-900">
-        Add your Supabase frontend environment variables before using class profiles.
+      <section className="rounded-3xl border border-warning/30 bg-warning/10 p-8 text-warning">
+        Add your frontend environment variables before using class profiles.
       </section>
     );
   }
@@ -28,71 +28,84 @@ export default async function ClassesPage() {
 
   return (
     <section className="space-y-6">
-      <div className="flex flex-col gap-4 rounded-[28px] bg-white/90 p-6 shadow-sm md:flex-row md:items-center md:justify-between">
-        <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-clay">
-            Class Profiles
-          </p>
-          <h2 className="mt-2 text-3xl font-semibold tracking-tight text-ink">
-            Manage the classes you teach.
-          </h2>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-            Each profile stays class-level only so the MVP can support instructional decisions
-            without requiring student-identifiable records.
-          </p>
+      <div className="hero-card p-6 md:p-8">
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div className="max-w-3xl">
+            <p className="section-kicker">Class profiles</p>
+            <h2 className="mt-3 text-4xl font-semibold text-neutral-900 dark:text-neutral-100">
+              Organize your courses before entering weekly class summaries.
+            </h2>
+            <p className="mt-3 text-sm leading-7 text-neutral-500 dark:text-neutral-400">
+              Each profile is intentionally light: course, subject, level, size, and term. The
+              rest of the workflow builds from class-level assessment signals only.
+            </p>
+          </div>
+          <Link
+            href="/dashboard/classes/new"
+            className="rounded-full bg-primary-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-primary-700"
+          >
+            New class
+          </Link>
         </div>
-        <Link
-          href="/dashboard/classes/new"
-          className="rounded-full bg-pine px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#184a3c]"
-        >
-          New Class
-        </Link>
       </div>
 
       {error ? (
-        <div className="rounded-[24px] border border-red-200 bg-red-50 p-6 text-sm text-red-700">
+        <div className="rounded-2xl border border-danger/30 bg-danger/10 p-6 text-sm text-danger">
           {error.message}
         </div>
       ) : null}
 
       {classList.length === 0 ? (
-        <div className="rounded-[28px] border border-dashed border-slate-300 bg-white/80 p-10 text-center">
-          <h3 className="text-2xl font-semibold text-ink">No classes yet</h3>
-          <p className="mt-3 text-sm leading-6 text-slate-600">
-            Create your first class profile to start organizing assessment workflows and weekly
-            analysis.
+        <div className="paper-card p-10 text-center">
+          <h3 className="text-3xl font-semibold text-neutral-900 dark:text-neutral-100">
+            No classes yet
+          </h3>
+          <p className="mt-3 text-sm leading-6 text-neutral-500 dark:text-neutral-400">
+            Create your first class profile to start logging assessment summaries, reviewing
+            recommendations, and tracking teaching methods over time.
           </p>
           <Link
             href="/dashboard/classes/new"
-            className="mt-6 inline-flex rounded-full bg-pine px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#184a3c]"
+            className="mt-6 inline-flex rounded-full bg-primary-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-primary-700"
           >
-            Create First Class
+            Create first class
           </Link>
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {classList.map((classRecord) => (
-            <article
-              key={classRecord.id}
-              className="rounded-[24px] border border-slate-200 bg-white/90 p-6 shadow-sm"
-            >
-              <p className="text-sm font-medium text-slate-500">{classRecord.subject_area}</p>
-              <h3 className="mt-2 text-xl font-semibold text-ink">{classRecord.course_name}</h3>
-              <div className="mt-4 space-y-2 text-sm text-slate-600">
-                <p>Class size: {classRecord.class_size}</p>
-                <p>Level: {classRecord.class_level}</p>
-                <p>Term: {classRecord.term_label || "Not set yet"}</p>
+            <article key={classRecord.id} className="paper-card p-6">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="section-kicker">{classRecord.subject_area}</p>
+                  <h3 className="mt-3 text-2xl font-semibold text-neutral-900 dark:text-neutral-100">
+                    {classRecord.course_name}
+                  </h3>
+                </div>
+                <div className="tonal-chip bg-secondary-50 text-secondary-700 dark:bg-secondary-900/30 dark:text-secondary-200">
+                  {classRecord.class_size} learners
+                </div>
               </div>
-              <div className="mt-6 flex gap-3">
+
+              <div className="mt-6 grid gap-3 text-sm text-neutral-500 dark:text-neutral-400">
+                <div className="rounded-2xl bg-neutral-50 px-4 py-3 dark:bg-neutral-950">
+                  Level: {classRecord.class_level}
+                </div>
+                <div className="rounded-2xl bg-neutral-50 px-4 py-3 dark:bg-neutral-950">
+                  Term: {classRecord.term_label || "Not set yet"}
+                </div>
+              </div>
+
+              <div className="mt-6 flex flex-wrap gap-3">
                 <Link
                   href={`/dashboard/classes/${classRecord.id}`}
-                  className="rounded-full bg-mist px-4 py-2 text-sm font-semibold text-pine transition hover:bg-[#dfede6]"
+                  className="rounded-full bg-primary-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-700"
                 >
-                  View
+                  Open class
                 </Link>
                 <Link
                   href={`/dashboard/classes/${classRecord.id}/edit`}
-                  className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400"
+                  className="rounded-full border border-neutral-200 px-4 py-2 text-sm font-semibold text-neutral-800 transition hover:border-neutral-300 dark:border-neutral-700 dark:text-neutral-100 dark:hover:border-neutral-600"
                 >
                   Edit
                 </Link>

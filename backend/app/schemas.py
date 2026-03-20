@@ -52,10 +52,10 @@ class AssessmentRead(BaseModel):
     assessment_type: str
     topic: str | None = None
     average_score: float | None = None
-    score_summary: dict[str, Any] | None = None
-    concept_summary: dict[str, Any] | None = None
-    teacher_note: str | None = None
-    confidence_summary: str | None = None
+    average_confidence: float | None = None
+    participation_rate: float | None = None
+    current_teaching_method: str | None = None
+    teacher_observation: str | None = None
     raw_file_path: str | None = None
     raw_upload_expires_at: datetime | None = None
     retention_category: str
@@ -72,10 +72,10 @@ class AssessmentCreate(BaseModel):
     assessment_type: str = Field(min_length=1, max_length=80)
     topic: str | None = Field(default=None, max_length=200)
     average_score: float | None = Field(default=None, ge=0, le=100)
-    score_summary: dict[str, Any] | None = None
-    concept_summary: dict[str, Any] | None = None
-    teacher_note: str | None = Field(default=None, max_length=2000)
-    confidence_summary: str | None = Field(default=None, max_length=1000)
+    average_confidence: float | None = Field(default=None, ge=1, le=5)
+    participation_rate: float | None = Field(default=None, ge=0, le=100)
+    current_teaching_method: str | None = Field(default=None, max_length=200)
+    teacher_observation: str | None = Field(default=None, max_length=2000)
     raw_file_path: str | None = None
     raw_upload_expires_at: datetime | None = None
     retention_category: str = "assessment_detail"
@@ -100,8 +100,9 @@ class WeeklyAnalysisRead(BaseModel):
 
 class AssessmentAnalysisRead(BaseModel):
     average_score: float | None = None
+    average_confidence: float | None = None
+    participation_rate: float | None = None
     understanding_bands: list[dict[str, Any]]
-    concept_summary: list[dict[str, Any]]
     confidence_mismatch: bool
     detected_patterns: list[str]
 
@@ -141,8 +142,9 @@ class AISummaryRequest(BaseModel):
     assessment_title: str | None = None
     analysis_date: date | None = None
     average_score: float | None = None
+    average_confidence: float | None = None
+    participation_rate: float | None = None
     understanding_bands: list[dict[str, Any]] = Field(default_factory=list)
-    concept_summary: list[dict[str, Any]] = Field(default_factory=list)
     confidence_mismatch: bool = False
     detected_patterns: list[str] = Field(default_factory=list)
     recommendations: list[AISummaryRecommendation] = Field(default_factory=list)

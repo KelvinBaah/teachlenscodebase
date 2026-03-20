@@ -2,12 +2,17 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { AiSummaryPanel } from "@/components/classes/ai-summary-panel";
-import { AnalyticsCharts } from "@/components/classes/analytics-charts";
 import { AssessmentForm } from "@/components/classes/assessment-form";
+import { AssessmentSummarySelector } from "@/components/classes/assessment-summary-selector";
+import { AssessmentTrendChart } from "@/components/classes/assessment-trend-chart";
 import { DeleteClassButton } from "@/components/classes/delete-class-button";
 import { RecommendationPanel } from "@/components/classes/recommendation-panel";
-import { TeachingCycleTimeline } from "@/components/classes/teaching-cycle-timeline";
-import type { AssessmentRecord } from "@/lib/assessments";
+import { TeachingCycleSelector } from "@/components/classes/teaching-cycle-selector";
+import {
+  formatAssessmentTypeLabel,
+  normalizeAssessmentRecord,
+  type AssessmentRecord,
+} from "@/lib/assessments";
 import { analyzeAssessment, buildTrendPoints } from "@/lib/analytics";
 import type { ClassRecord } from "@/lib/classes";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -22,6 +27,11 @@ import { deleteClassAction } from "../actions";
 type ClassDetailPageProps = {
   params: Promise<{
     classId: string;
+  }>;
+  searchParams?: Promise<{
+    created?: string;
+    assessment?: string;
+    focus?: string;
   }>;
 };
 
@@ -69,14 +79,18 @@ function buildTimelineEntries(
   });
 }
 
-export default async function ClassDetailPage({ params }: ClassDetailPageProps) {
+export default async function ClassDetailPage({
+  params,
+  searchParams,
+}: ClassDetailPageProps) {
   const { classId } = await params;
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const supabase = await createSupabaseServerClient();
 
   if (!supabase) {
     return (
-      <section className="rounded-[28px] border border-amber-200 bg-amber-50 p-8 text-amber-900">
-        Add your Supabase frontend environment variables before using class profiles.
+      <section className="rounded-3xl border border-warning/30 bg-warning/10 p-8 text-warning">
+        Add your frontend environment variables before using class profiles.
       </section>
     );
   }
@@ -95,21 +109,32 @@ export default async function ClassDetailPage({ params }: ClassDetailPageProps) 
 
   const { data: assessments } = await supabase
     .from("assessments")
-    .select(
-      "id, title, assessment_date, assessment_type, topic, average_score, score_summary, concept_summary, teacher_note, confidence_summary, raw_file_path, raw_upload_expires_at, retention_category, expires_at, created_at",
-    )
+    .select("*")
     .eq("class_id", classRecord.id)
     .order("assessment_date", { ascending: false });
 
-  const assessmentHistory = (assessments ?? []) as AssessmentRecord[];
+  const assessmentHistory = (assessments ?? []).map((assessment) =>
+    normalizeAssessmentRecord(assessment as Record<string, unknown>),
+  ) as AssessmentRecord[];
+  const selectedAssessment =
+    assessmentHistory.find(
+      (assessment) => assessment.id === resolvedSearchParams?.assessment,
+    ) ??
+    assessmentHistory[0] ??
+    null;
   const latestAssessment = assessmentHistory[0] ?? null;
   const latestAnalysis = latestAssessment ? analyzeAssessment(latestAssessment) : null;
+  const selectedAssessmentAnalysis = selectedAssessment
+    ? analyzeAssessment(selectedAssessment)
+    : null;
   const trendPoints = buildTrendPoints(assessmentHistory);
+
   const { data: recommendationRows } = await supabase
     .from("recommendations")
     .select("id, assessment_id, method_name, reason, implementation_note, created_at")
     .eq("class_id", classRecord.id)
     .order("created_at", { ascending: true });
+
   const { data: teachingMethodLogs } = await supabase
     .from("teaching_method_logs")
     .select(
@@ -120,9 +145,9 @@ export default async function ClassDetailPage({ params }: ClassDetailPageProps) 
     .order("created_at", { ascending: false });
 
   const recommendationHistory = (recommendationRows ?? []) as RecommendationHistoryRecord[];
-  const latestRecommendations = latestAssessment
+  const selectedRecommendations = selectedAssessment
     ? recommendationHistory.filter(
-        (recommendation) => recommendation.assessment_id === latestAssessment.id,
+        (recommendation) => recommendation.assessment_id === selectedAssessment.id,
       )
     : [];
   const methodLogHistory = (teachingMethodLogs ?? []) as TeachingMethodLogRecord[];
@@ -134,33 +159,37 @@ export default async function ClassDetailPage({ params }: ClassDetailPageProps) 
 
   return (
     <section className="space-y-6">
-      <div className="rounded-[28px] bg-white/90 p-6 shadow-sm">
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-clay">
-              Class Detail
-            </p>
-            <h2 className="mt-2 text-3xl font-semibold tracking-tight text-ink">
+      {resolvedSearchParams?.created === "1" ? (
+        <div className="rounded-2xl border border-success/30 bg-success/10 px-4 py-3 text-sm text-success">
+          Class created successfully. You can add the first assessment below.
+        </div>
+      ) : null}
+
+      <section className="rounded-3xl border border-neutral-200 bg-white p-6 shadow-sm dark:border-neutral-800 dark:bg-neutral-900 md:p-8">
+        <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+          <div className="max-w-4xl">
+            <p className="section-kicker">Class workspace</p>
+            <h1 className="mt-3 text-3xl font-semibold text-neutral-900 dark:text-neutral-100 md:text-4xl">
               {classRecord.course_name}
-            </h2>
-            <p className="mt-3 text-sm leading-6 text-slate-600">
-              {classRecord.subject_area} | {classRecord.class_level} | {classRecord.class_size}{" "}
-              learners
+            </h1>
+            <p className="mt-4 text-sm leading-7 text-neutral-500 dark:text-neutral-400">
+              Review class-level assessment inputs, analytics, recommendations, AI explanation,
+              and the weekly teaching timeline in one place.
             </p>
           </div>
 
           <div className="flex flex-wrap gap-3">
             <Link
               href={`/dashboard/classes/${classRecord.id}/progress`}
-              className="rounded-full bg-mist px-4 py-2 text-sm font-semibold text-pine transition hover:bg-[#dfede6]"
+              className="rounded-full bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-700"
             >
-              View Progress
+              View progress
             </Link>
             <Link
               href={`/dashboard/classes/${classRecord.id}/edit`}
-              className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400"
+              className="rounded-full border border-neutral-200 bg-neutral-50 px-4 py-2.5 text-sm font-semibold text-neutral-800 transition hover:border-neutral-300 hover:bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100 dark:hover:border-neutral-600"
             >
-              Edit Class
+              Edit class
             </Link>
             <form action={deleteClassAction}>
               <input type="hidden" name="classId" value={classRecord.id} />
@@ -168,225 +197,134 @@ export default async function ClassDetailPage({ params }: ClassDetailPageProps) 
             </form>
           </div>
         </div>
-      </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <article className="rounded-[24px] border border-slate-200 bg-white/90 p-6 shadow-sm">
-          <h3 className="text-lg font-semibold text-ink">Profile Summary</h3>
-          <dl className="mt-4 space-y-3 text-sm text-slate-600">
-            <div className="flex justify-between gap-4">
-              <dt>Subject area</dt>
-              <dd>{classRecord.subject_area}</dd>
-            </div>
-            <div className="flex justify-between gap-4">
-              <dt>Class level</dt>
-              <dd>{classRecord.class_level}</dd>
-            </div>
-            <div className="flex justify-between gap-4">
-              <dt>Class size</dt>
-              <dd>{classRecord.class_size}</dd>
-            </div>
-            <div className="flex justify-between gap-4">
-              <dt>Term</dt>
-              <dd>{classRecord.term_label || "Not set yet"}</dd>
-            </div>
-          </dl>
-        </article>
+        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <article className="rounded-2xl bg-neutral-50 p-4 dark:bg-neutral-950">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-secondary-700 dark:text-secondary-300">
+              Subject
+            </p>
+            <p className="mt-3 text-lg font-semibold text-neutral-900 dark:text-neutral-100">
+              {classRecord.subject_area}
+            </p>
+          </article>
+          <article className="rounded-2xl bg-neutral-50 p-4 dark:bg-neutral-950">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-secondary-700 dark:text-secondary-300">
+              Level
+            </p>
+            <p className="mt-3 text-lg font-semibold text-neutral-900 dark:text-neutral-100">
+              {classRecord.class_level}
+            </p>
+          </article>
+          <article className="rounded-2xl bg-neutral-50 p-4 dark:bg-neutral-950">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-secondary-700 dark:text-secondary-300">
+              Class size
+            </p>
+            <p className="mt-3 text-lg font-semibold text-neutral-900 dark:text-neutral-100">
+              {classRecord.class_size}
+            </p>
+          </article>
+          <article className="rounded-2xl bg-neutral-50 p-4 dark:bg-neutral-950">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-secondary-700 dark:text-secondary-300">
+              Term
+            </p>
+            <p className="mt-3 text-lg font-semibold text-neutral-900 dark:text-neutral-100">
+              {classRecord.term_label || "Not set"}
+            </p>
+          </article>
+        </div>
+      </section>
 
-        <article className="rounded-[24px] border border-slate-200 bg-white/90 p-6 shadow-sm">
-          <h3 className="text-lg font-semibold text-ink">Assessment Workflow</h3>
-          <p className="mt-3 text-sm leading-6 text-slate-600">
-            Add weekly formative assessments with manual summaries or a narrow CSV upload. All
-            entries stay class-level or concept-level only.
+      <section className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+        <AssessmentForm classId={classRecord.id} />
+
+        <article className="rounded-3xl bg-gradient-to-br from-primary-700 via-primary-600 to-secondary-600 p-6 text-white shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/70">
+            What appears after you save
           </p>
+          <h2 className="mt-4 text-2xl font-semibold">The full teaching review flow lives on this page.</h2>
+          <div className="mt-6 space-y-3">
+            <div className="rounded-2xl bg-white/10 p-4 text-sm leading-6 text-white/82">
+              Analytics visualize score, confidence, participation, and trends.
+            </div>
+            <div className="rounded-2xl bg-white/10 p-4 text-sm leading-6 text-white/82">
+              Recommendations appear from the rule-based matrix tied to detected patterns.
+            </div>
+            <div className="rounded-2xl bg-white/10 p-4 text-sm leading-6 text-white/82">
+              The AI summary explains the analysis without replacing the recommendation logic.
+            </div>
+            <div className="rounded-2xl bg-white/10 p-4 text-sm leading-6 text-white/82">
+              The teaching cycle timeline tracks what you actually taught next.
+            </div>
+          </div>
         </article>
-      </div>
-
-      <AssessmentForm classId={classRecord.id} />
+      </section>
 
       <section className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
-        <article className="rounded-[28px] bg-ink p-6 text-white shadow-[0_20px_60px_rgba(16,33,43,0.12)]">
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-white/70">
-            Current Understanding Snapshot
-          </p>
+        <AssessmentTrendChart trendPoints={trendPoints} />
+
+        <article className="rounded-3xl border border-neutral-200 bg-white p-6 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="section-kicker">Current snapshot</p>
+              <h2 className="mt-2 text-2xl font-semibold text-neutral-900 dark:text-neutral-100">
+                Latest saved assessment
+              </h2>
+            </div>
+            <span className="rounded-full bg-neutral-100 px-3 py-1 text-xs font-semibold text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
+              {latestAssessment ? latestAssessment.assessment_date : "No assessment yet"}
+            </span>
+          </div>
 
           {latestAnalysis ? (
-            <div className="mt-4 space-y-5">
-              <div className="flex items-end gap-3">
-                <div className="text-5xl font-semibold">
+            <div className="mt-6 grid gap-3 md:grid-cols-2">
+              <div className="rounded-2xl bg-neutral-50 p-4 dark:bg-neutral-950">
+                <p className="text-sm text-neutral-500 dark:text-neutral-400">Average score</p>
+                <p className="mt-2 text-3xl font-semibold text-neutral-900 dark:text-neutral-100">
                   {latestAnalysis.averageScore ?? "--"}
-                </div>
-                <div className="pb-1 text-sm text-white/70">average score</div>
+                </p>
               </div>
-
-              <div className="rounded-2xl bg-white/8 p-4">
-                <p className="text-sm text-white/70">Detected patterns</p>
-                <div className="mt-3 space-y-2 text-sm leading-6 text-white/85">
-                  {latestAnalysis.detectedPatterns.length > 0 ? (
-                    latestAnalysis.detectedPatterns.map((pattern) => (
-                      <p key={pattern}>{pattern}</p>
-                    ))
-                  ) : (
-                    <p>No strong pattern detected yet.</p>
-                  )}
-                </div>
-              </div>
-
-              <div className="rounded-2xl bg-white/8 p-4">
-                <p className="text-sm text-white/70">Confidence mismatch</p>
-                <p className="mt-2 text-base font-medium text-white">
-                  {latestAnalysis.confidenceMismatch
-                    ? "Possible mismatch between confidence and performance"
-                    : "No confidence-performance mismatch flagged"}
+              <div className="rounded-2xl bg-neutral-50 p-4 dark:bg-neutral-950">
+                <p className="text-sm text-neutral-500 dark:text-neutral-400">
+                  Detected pattern
+                </p>
+                <p className="mt-2 text-sm leading-6 text-neutral-700 dark:text-neutral-300">
+                  {latestAnalysis.detectedPatterns[0] ??
+                    "No strong pattern detected for the latest assessment."}
                 </p>
               </div>
             </div>
           ) : (
-            <div className="mt-4 rounded-2xl bg-white/8 p-4 text-sm leading-6 text-white/80">
-              Add an assessment to generate the first current-understanding snapshot.
+            <div className="mt-6 rounded-3xl border border-dashed border-neutral-300 bg-neutral-50 p-8 text-center dark:border-neutral-700 dark:bg-neutral-950">
+              <p className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">
+                No analytics yet
+              </p>
+              <p className="mt-2 text-sm leading-6 text-neutral-500 dark:text-neutral-400">
+                Save the first assessment above and this area will show the latest class snapshot.
+              </p>
             </div>
           )}
-        </article>
-
-        <article className="rounded-[28px] border border-slate-200 bg-white/90 p-6 shadow-sm">
-          <h3 className="text-xl font-semibold text-ink">Analytics Overview</h3>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            These descriptive charts stay transparent and teacher-friendly. They summarize what the
-            current data suggests without using machine learning.
-          </p>
-          <div className="mt-6">
-            <AnalyticsCharts
-              analysis={
-                latestAnalysis ?? {
-                  averageScore: null,
-                  scoreDistribution: [],
-                  understandingBands: [],
-                  conceptMetrics: [],
-                  confidenceMismatch: false,
-                  detectedPatterns: [],
-                }
-              }
-              trendPoints={trendPoints}
-            />
-          </div>
         </article>
       </section>
 
       <RecommendationPanel
         classId={classRecord.id}
-        assessmentId={latestAssessment?.id ?? null}
-        latestAssessmentTitle={latestAssessment?.title ?? null}
-        recommendations={latestRecommendations}
+        assessmentId={selectedAssessment?.id ?? null}
+        latestAssessmentTitle={selectedAssessment?.title ?? null}
+        recommendations={selectedRecommendations}
+        recommendationsAvailable={Boolean(selectedAssessment)}
       />
 
       <AiSummaryPanel
         className={classRecord.course_name}
-        assessmentTitle={latestAssessment?.title ?? null}
-        analysisDate={latestAssessment?.assessment_date ?? null}
-        analysis={latestAnalysis}
-        recommendations={latestRecommendations}
+        assessmentTitle={selectedAssessment?.title ?? null}
+        analysisDate={selectedAssessment?.assessment_date ?? null}
+        analysis={selectedAssessmentAnalysis}
+        recommendations={selectedRecommendations}
       />
 
-      <TeachingCycleTimeline entries={timelineEntries} />
+      <TeachingCycleSelector entries={timelineEntries} />
 
-      <section className="rounded-[28px] border border-slate-200 bg-white/90 p-6 shadow-sm">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h3 className="text-xl font-semibold text-ink">Assessment History</h3>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
-              Review the weekly evidence attached to this class before the analytics and
-              recommendation sessions build on top of it.
-            </p>
-          </div>
-          <div className="rounded-full bg-mist px-4 py-2 text-sm text-pine">
-            {assessmentHistory.length} recorded
-          </div>
-        </div>
-
-        {assessmentHistory.length === 0 ? (
-          <div className="mt-6 rounded-[24px] border border-dashed border-slate-300 bg-slate-50/70 p-8 text-center">
-            <p className="text-lg font-semibold text-ink">No assessments yet</p>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
-              Add your first weekly assessment above to start building class-level evidence over
-              time.
-            </p>
-          </div>
-        ) : (
-          <div className="mt-6 space-y-4">
-            {assessmentHistory.map((assessment) => (
-              <article
-                key={assessment.id}
-                className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-5"
-              >
-                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                  <div>
-                    <p className="text-sm font-medium uppercase tracking-[0.16em] text-clay">
-                      {assessment.assessment_type}
-                    </p>
-                    <h4 className="mt-2 text-lg font-semibold text-ink">{assessment.title}</h4>
-                    <p className="mt-2 text-sm text-slate-600">
-                      {assessment.assessment_date}
-                      {assessment.topic ? ` | ${assessment.topic}` : ""}
-                    </p>
-                  </div>
-                  <div className="text-sm text-slate-600">
-                    Avg score: {assessment.average_score ?? "Not entered"}
-                  </div>
-                </div>
-
-                <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  <div className="rounded-2xl bg-white p-4 text-sm text-slate-600">
-                    <p className="font-semibold text-ink">Distribution Summary</p>
-                    <p className="mt-2 leading-6">
-                      {assessment.score_summary
-                        ? Object.entries(assessment.score_summary)
-                            .map(([label, value]) => `${label}: ${value}`)
-                            .join(", ")
-                        : "No distribution summary entered."}
-                    </p>
-                  </div>
-                  <div className="rounded-2xl bg-white p-4 text-sm text-slate-600">
-                    <p className="font-semibold text-ink">Concept Mastery</p>
-                    <p className="mt-2 leading-6">
-                      {assessment.concept_summary
-                        ? Object.entries(assessment.concept_summary)
-                            .map(([label, value]) => `${label}: ${value}`)
-                            .join(", ")
-                        : "No concept mastery summary entered."}
-                    </p>
-                  </div>
-                </div>
-
-                {(assessment.teacher_note || assessment.confidence_summary) ? (
-                  <div className="mt-4 grid gap-3 md:grid-cols-2">
-                    <div className="rounded-2xl bg-white p-4 text-sm text-slate-600">
-                      <p className="font-semibold text-ink">Teacher Note</p>
-                      <p className="mt-2 leading-6">
-                        {assessment.teacher_note || "No teacher note entered."}
-                      </p>
-                    </div>
-                    <div className="rounded-2xl bg-white p-4 text-sm text-slate-600">
-                      <p className="font-semibold text-ink">Confidence Summary</p>
-                      <p className="mt-2 leading-6">
-                        {assessment.confidence_summary || "No confidence summary entered."}
-                      </p>
-                    </div>
-                  </div>
-                ) : null}
-
-                {assessment.raw_file_path ? (
-                  <p className="mt-4 text-xs leading-5 text-slate-500">
-                    Raw CSV stored at <span className="font-mono">{assessment.raw_file_path}</span>
-                    {assessment.raw_upload_expires_at
-                      ? ` until ${assessment.raw_upload_expires_at}`
-                      : ""}.
-                  </p>
-                ) : null}
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
+      <AssessmentSummarySelector assessments={assessmentHistory} />
     </section>
   );
 }

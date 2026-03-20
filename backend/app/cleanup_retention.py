@@ -70,6 +70,8 @@ def cleanup_expired_assessment_details(
                 {
                     "teacher_note": None,
                     "confidence_summary": None,
+                    "current_teaching_method": None,
+                    "teacher_observation": None,
                     "raw_file_path": None,
                     "raw_upload_expires_at": None,
                     "retention_category": "aggregate_summary",

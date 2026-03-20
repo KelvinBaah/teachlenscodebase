@@ -33,9 +33,9 @@ export function AiSummaryPanel({
       buildFallbackAiSummary({
         analysis: analysis ?? {
           averageScore: null,
-          scoreDistribution: [],
+          averageConfidence: null,
+          participationRate: null,
           understandingBands: [],
-          conceptMetrics: [],
           confidenceMismatch: false,
           detectedPatterns: [],
         },
@@ -75,8 +75,9 @@ export function AiSummaryPanel({
           assessment_title: assessmentTitle,
           analysis_date: analysisDate,
           average_score: analysis.averageScore,
+          average_confidence: analysis.averageConfidence,
+          participation_rate: analysis.participationRate,
           understanding_bands: analysis.understandingBands,
-          concept_summary: analysis.conceptMetrics,
           confidence_mismatch: analysis.confidenceMismatch,
           detected_patterns: analysis.detectedPatterns,
           recommendations: recommendations.map((recommendation) => ({
@@ -113,12 +114,15 @@ export function AiSummaryPanel({
   }, [analysis, loadSummary]);
 
   return (
-    <section className="rounded-[28px] border border-slate-200 bg-white/90 p-6 shadow-sm">
+    <section className="rounded-3xl border border-neutral-200 bg-white p-6 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h3 className="text-xl font-semibold text-ink">AI Summary Layer</h3>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            This optional panel explains the current analysis and rule-based methods in teacher
+          <p className="section-kicker">AI summary</p>
+          <h3 className="mt-2 text-2xl font-semibold text-neutral-900 dark:text-neutral-100">
+            Teacher-facing explanation layer
+          </h3>
+          <p className="mt-2 text-sm leading-6 text-neutral-500 dark:text-neutral-400">
+            This optional panel explains the current analysis and rule-based methods in plain
             language. It never selects recommendations by itself.
           </p>
         </div>
@@ -126,48 +130,56 @@ export function AiSummaryPanel({
           type="button"
           onClick={() => void loadSummary()}
           disabled={!analysis || status === "loading"}
-          className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-full border border-neutral-200 bg-neutral-50 px-4 py-2 text-sm font-semibold text-neutral-700 transition hover:border-neutral-300 hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-200 dark:hover:border-neutral-600"
         >
-          {status === "loading" ? "Loading..." : "Retry Summary"}
+          {status === "loading" ? "Loading..." : "Retry summary"}
         </button>
       </div>
 
       {!analysis ? (
-        <div className="mt-6 rounded-[24px] border border-dashed border-slate-300 bg-slate-50/70 p-8 text-center">
-          <p className="text-lg font-semibold text-ink">No analysis yet</p>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
+        <div className="mt-6 rounded-3xl border border-dashed border-neutral-300 bg-neutral-50 p-8 text-center dark:border-neutral-700 dark:bg-neutral-950">
+          <p className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">
+            No analysis yet
+          </p>
+          <p className="mt-2 text-sm leading-6 text-neutral-500 dark:text-neutral-400">
             Add an assessment first so TeachLens has grounded analytics to summarize.
           </p>
         </div>
       ) : (
         <div className="mt-6 space-y-4">
-          <article className="rounded-[24px] bg-slate-50/70 p-5">
+          {status === "loading" ? (
+            <div className="rounded-2xl border border-secondary-200 bg-secondary-50 px-4 py-3 text-sm text-secondary-700 dark:border-secondary-900/50 dark:bg-secondary-900/20 dark:text-secondary-200">
+              Generating the teacher-facing summary for this assessment.
+            </div>
+          ) : null}
+
+          <article className="rounded-3xl bg-neutral-50 p-5 dark:bg-neutral-950">
             <div className="flex flex-wrap items-center gap-3">
-              <p className="text-sm font-medium uppercase tracking-[0.16em] text-clay">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-secondary-700 dark:text-secondary-300">
                 Class understanding
               </p>
-              <div className="rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-500">
+              <div className="rounded-full bg-white px-3 py-1 text-xs font-medium text-neutral-500 dark:bg-neutral-900 dark:text-neutral-300">
                 {result.source === "openai"
                   ? `OpenAI ${result.model ?? ""}`.trim()
                   : "Local fallback"}
               </div>
             </div>
-            <p className="mt-3 text-sm leading-7 text-slate-700">
+            <p className="mt-3 text-sm leading-7 text-neutral-700 dark:text-neutral-300">
               {result.understanding_summary}
             </p>
           </article>
 
-          <article className="rounded-[24px] bg-slate-50/70 p-5">
-            <p className="text-sm font-medium uppercase tracking-[0.16em] text-clay">
+          <article className="rounded-3xl bg-neutral-50 p-5 dark:bg-neutral-950">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-secondary-700 dark:text-secondary-300">
               Why these methods
             </p>
-            <p className="mt-3 text-sm leading-7 text-slate-700">
+            <p className="mt-3 text-sm leading-7 text-neutral-700 dark:text-neutral-300">
               {result.recommendation_explanation}
             </p>
           </article>
 
           {result.error ? (
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <div className="rounded-2xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
               {result.error}
             </div>
           ) : null}

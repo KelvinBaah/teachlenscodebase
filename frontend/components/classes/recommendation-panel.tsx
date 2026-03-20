@@ -12,6 +12,7 @@ type RecommendationPanelProps = {
   assessmentId: string | null;
   latestAssessmentTitle: string | null;
   recommendations: RecommendationRecord[];
+  recommendationsAvailable?: boolean;
 };
 
 export function RecommendationPanel({
@@ -19,28 +20,38 @@ export function RecommendationPanel({
   assessmentId,
   latestAssessmentTitle,
   recommendations,
+  recommendationsAvailable = true,
 }: RecommendationPanelProps) {
   return (
-    <section className="rounded-[28px] border border-slate-200 bg-white/90 p-6 shadow-sm">
+    <section
+      id="recommendations"
+      className="rounded-3xl border border-neutral-200 bg-white p-6 shadow-sm dark:border-neutral-800 dark:bg-neutral-900"
+    >
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h3 className="text-xl font-semibold text-ink">Recommended Teaching Methods</h3>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            These recommendations come from the rule-based matrix tied to the latest detected
-            patterns.
+          <p className="section-kicker">Recommendations</p>
+          <h3 className="mt-2 text-2xl font-semibold text-neutral-900 dark:text-neutral-100">
+            Recommended teaching methods
+          </h3>
+          <p className="mt-2 text-sm leading-6 text-neutral-500 dark:text-neutral-400">
+            These suggestions come from the rule-based matrix tied to the selected saved
+            assessment.
           </p>
         </div>
-        <div className="rounded-full bg-mist px-4 py-2 text-sm text-pine">
+        <div className="rounded-full bg-secondary-50 px-4 py-2 text-sm text-secondary-700 dark:bg-secondary-900/30 dark:text-secondary-200">
           {latestAssessmentTitle ? `Based on ${latestAssessmentTitle}` : "Waiting for assessment"}
         </div>
       </div>
 
       {recommendations.length === 0 ? (
-        <div className="mt-6 rounded-[24px] border border-dashed border-slate-300 bg-slate-50/70 p-8 text-center">
-          <p className="text-lg font-semibold text-ink">No recommendations yet</p>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            Add an assessment with enough evidence to trigger detected learning patterns and this
-            panel will populate automatically.
+        <div className="mt-6 rounded-3xl border border-dashed border-neutral-300 bg-neutral-50 p-8 text-center dark:border-neutral-700 dark:bg-neutral-950">
+          <p className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">
+            {recommendationsAvailable ? "No recommendations yet" : "No recommendations available"}
+          </p>
+          <p className="mt-2 text-sm leading-6 text-neutral-500 dark:text-neutral-400">
+            {recommendationsAvailable
+              ? "Save an assessment with enough evidence to trigger learning patterns and this panel will populate automatically."
+              : "TeachLens saved the assessment, but no rule-based recommendations were generated from that assessment yet."}
           </p>
         </div>
       ) : (
@@ -48,16 +59,18 @@ export function RecommendationPanel({
           {recommendations.map((recommendation) => (
             <article
               key={recommendation.id}
-              className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-5"
+              className="rounded-3xl border border-neutral-200 bg-neutral-50 p-5 dark:border-neutral-800 dark:bg-neutral-950"
             >
-              <p className="text-sm font-medium uppercase tracking-[0.16em] text-clay">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-secondary-700 dark:text-secondary-300">
                 Recommended method
               </p>
-              <h4 className="mt-2 text-lg font-semibold text-ink">{recommendation.method_name}</h4>
-              <p className="mt-3 text-sm leading-6 text-slate-600">
-                {recommendation.reason || "Recommended from the latest learning pattern analysis."}
+              <h4 className="mt-2 text-lg font-semibold text-neutral-900 dark:text-neutral-100">
+                {recommendation.method_name}
+              </h4>
+              <p className="mt-3 text-sm leading-6 text-neutral-500 dark:text-neutral-400">
+                {recommendation.reason || "Recommended from the selected assessment analysis."}
               </p>
-              <div className="mt-4 rounded-2xl bg-white p-4 text-sm leading-6 text-slate-600">
+              <div className="mt-4 rounded-2xl bg-white p-4 text-sm leading-6 text-neutral-600 dark:bg-neutral-900 dark:text-neutral-300">
                 {recommendation.implementation_note || "Implementation guidance will appear here."}
               </div>
             </article>

@@ -31,6 +31,14 @@ export function buildFallbackAiSummary({
     summaryParts.push(`The latest class average is ${analysis.averageScore}.`);
   }
 
+  if (analysis.averageConfidence !== null) {
+    summaryParts.push(`Average confidence was ${analysis.averageConfidence} out of 5.`);
+  }
+
+  if (analysis.participationRate !== null) {
+    summaryParts.push(`Participation was ${analysis.participationRate}% of the class.`);
+  }
+
   if (analysis.detectedPatterns[0]) {
     summaryParts.push(analysis.detectedPatterns[0]);
   } else if (analysis.confidenceMismatch) {

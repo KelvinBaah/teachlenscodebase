@@ -1,12 +1,16 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 
 import {
   createAssessmentAction,
   type AssessmentActionState,
 } from "@/app/dashboard/classes/[classId]/assessment-actions";
-import { assessmentTypeOptions } from "@/lib/assessments";
+import {
+  assessmentTypeOptions,
+  formatAssessmentTypeLabel,
+} from "@/lib/assessments";
 
 import { SubmitButton } from "./submit-button";
 
@@ -17,64 +21,86 @@ type AssessmentFormProps = {
 const initialState: AssessmentActionState = {};
 
 export function AssessmentForm({ classId }: AssessmentFormProps) {
-  const [inputMethod, setInputMethod] = useState<"manual" | "csv">("manual");
+  const router = useRouter();
+  const pathname = usePathname();
   const action = useMemo(() => createAssessmentAction.bind(null, classId), [classId]);
   const [state, formAction] = useActionState(action, initialState);
+  const [isNavigatingToRecommendations, setIsNavigatingToRecommendations] = useState(false);
+
+  useEffect(() => {
+    if (!state.success || !state.createdAssessmentId) {
+      return;
+    }
+
+    setIsNavigatingToRecommendations(true);
+
+    const targetUrl = `${pathname}?assessment=${state.createdAssessmentId}&focus=recommendations#recommendations`;
+    router.replace(targetUrl, { scroll: false });
+    router.refresh();
+
+    const timeoutId = window.setTimeout(() => {
+      document.getElementById("recommendations")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+      setIsNavigatingToRecommendations(false);
+    }, 150);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [pathname, router, state.createdAssessmentId, state.success]);
 
   return (
-    <form
-      action={formAction}
-      className="rounded-[28px] border border-slate-200 bg-white/90 p-6 shadow-sm"
-    >
+    <form action={formAction} className="paper-card p-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h3 className="text-xl font-semibold text-ink">Add Weekly Assessment</h3>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            Use manual entry for quick summaries or upload a narrow CSV for concept mastery or
-            distribution data.
+          <h3 className="text-xl font-semibold text-neutral-900 dark:text-neutral-100">
+            Add Class Summary Assessment
+          </h3>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-neutral-500 dark:text-neutral-400">
+            Enter one quick class-level summary for a quiz, assignment, diagnostic check, or exit
+            ticket. Do not enter student names, IDs, or any other student-identifiable data.
           </p>
         </div>
-
-        <div className="inline-flex rounded-full bg-mist p-1 text-sm">
-          <button
-            type="button"
-            onClick={() => setInputMethod("manual")}
-            className={`rounded-full px-4 py-2 font-semibold transition ${
-              inputMethod === "manual" ? "bg-white text-pine shadow-sm" : "text-slate-600"
-            }`}
-          >
-            Manual
-          </button>
-          <button
-            type="button"
-            onClick={() => setInputMethod("csv")}
-            className={`rounded-full px-4 py-2 font-semibold transition ${
-              inputMethod === "csv" ? "bg-white text-pine shadow-sm" : "text-slate-600"
-            }`}
-          >
-            CSV Upload
-          </button>
+        <div className="rounded-full bg-secondary-50 px-4 py-2 text-sm text-secondary-700 dark:bg-secondary-900/30 dark:text-secondary-200">
+          Under 30 seconds
         </div>
       </div>
 
-      <input type="hidden" name="inputMethod" value={inputMethod} />
-
       <div className="mt-6 grid gap-5 md:grid-cols-2">
-        <div className="space-y-2 md:col-span-2">
-          <label className="text-sm font-medium text-slate-700" htmlFor="title">
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-neutral-700 dark:text-neutral-200" htmlFor="assessmentType">
+            Assessment Type
+          </label>
+          <select
+            id="assessmentType"
+            name="assessmentType"
+            required
+            defaultValue="quiz"
+            className="w-full rounded-2xl border border-neutral-200 px-4 py-3 text-sm outline-none transition focus:border-primary-400 focus:ring-2 focus:ring-primary-100 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:focus:border-primary-500 dark:focus:ring-primary-500/20"
+          >
+            {assessmentTypeOptions.map((option) => (
+              <option key={option} value={option}>
+                {formatAssessmentTypeLabel(option)}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-neutral-700 dark:text-neutral-200" htmlFor="title">
             Assessment Title
           </label>
           <input
             id="title"
             name="title"
             required
-            className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-pine focus:ring-2 focus:ring-pine/20"
-            placeholder="Week 3 concept test"
+            className="w-full rounded-2xl border border-neutral-200 px-4 py-3 text-sm outline-none transition focus:border-primary-400 focus:ring-2 focus:ring-primary-100 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:focus:border-primary-500 dark:focus:ring-primary-500/20"
+            placeholder="Quiz 2"
           />
         </div>
 
         <div className="space-y-2">
-          <label className="text-sm font-medium text-slate-700" htmlFor="assessmentDate">
+          <label className="text-sm font-medium text-neutral-700 dark:text-neutral-200" htmlFor="assessmentDate">
             Assessment Date
           </label>
           <input
@@ -82,147 +108,87 @@ export function AssessmentForm({ classId }: AssessmentFormProps) {
             name="assessmentDate"
             type="date"
             required
-            className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-pine focus:ring-2 focus:ring-pine/20"
+            className="w-full rounded-2xl border border-neutral-200 px-4 py-3 text-sm outline-none transition focus:border-primary-400 focus:ring-2 focus:ring-primary-100 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:focus:border-primary-500 dark:focus:ring-primary-500/20"
           />
         </div>
 
         <div className="space-y-2">
-          <label className="text-sm font-medium text-slate-700" htmlFor="assessmentType">
-            Assessment Type
-          </label>
-          <select
-            id="assessmentType"
-            name="assessmentType"
-            required
-            className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-pine focus:ring-2 focus:ring-pine/20"
-            defaultValue="quiz"
-          >
-            {assessmentTypeOptions.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-slate-700" htmlFor="topic">
+          <label className="text-sm font-medium text-neutral-700 dark:text-neutral-200" htmlFor="topicOrConcept">
             Topic or Concept
           </label>
           <input
-            id="topic"
-            name="topic"
-            className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-pine focus:ring-2 focus:ring-pine/20"
-            placeholder="Cell respiration"
+            id="topicOrConcept"
+            name="topicOrConcept"
+            className="w-full rounded-2xl border border-neutral-200 px-4 py-3 text-sm outline-none transition focus:border-primary-400 focus:ring-2 focus:ring-primary-100 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:focus:border-primary-500 dark:focus:ring-primary-500/20"
+            placeholder="Chemical equilibrium"
           />
         </div>
 
         <div className="space-y-2">
-          <label className="text-sm font-medium text-slate-700" htmlFor="averageScore">
+          <label className="text-sm font-medium text-neutral-700 dark:text-neutral-200" htmlFor="averageScore">
             Average Score
           </label>
           <input
             id="averageScore"
             name="averageScore"
             inputMode="decimal"
-            className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-pine focus:ring-2 focus:ring-pine/20"
-            placeholder="76"
+            className="w-full rounded-2xl border border-neutral-200 px-4 py-3 text-sm outline-none transition focus:border-primary-400 focus:ring-2 focus:ring-primary-100 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:focus:border-primary-500 dark:focus:ring-primary-500/20"
+            placeholder="72"
           />
         </div>
-      </div>
 
-      {inputMethod === "manual" ? (
-        <div className="mt-6 grid gap-5 md:grid-cols-2">
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-700" htmlFor="scoreSummaryText">
-              Distribution Summary
-            </label>
-            <textarea
-              id="scoreSummaryText"
-              name="scoreSummaryText"
-              rows={5}
-              className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-pine focus:ring-2 focus:ring-pine/20"
-              placeholder={"low: 8\nmedium: 14\nhigh: 10"}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-700" htmlFor="conceptSummaryText">
-              Concept Mastery
-            </label>
-            <textarea
-              id="conceptSummaryText"
-              name="conceptSummaryText"
-              rows={5}
-              className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-pine focus:ring-2 focus:ring-pine/20"
-              placeholder={"photosynthesis: 82\ncellular respiration: 69"}
-            />
-          </div>
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-neutral-700 dark:text-neutral-200" htmlFor="averageConfidence">
+            Average Confidence
+          </label>
+          <input
+            id="averageConfidence"
+            name="averageConfidence"
+            inputMode="decimal"
+            className="w-full rounded-2xl border border-neutral-200 px-4 py-3 text-sm outline-none transition focus:border-primary-400 focus:ring-2 focus:ring-primary-100 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:focus:border-primary-500 dark:focus:ring-primary-500/20"
+            placeholder="3.6"
+          />
+          <p className="text-xs leading-5 text-neutral-500 dark:text-neutral-400">Use a class average on a 1 to 5 scale.</p>
         </div>
-      ) : (
-        <div className="mt-6 space-y-4 rounded-[24px] border border-dashed border-slate-300 bg-slate-50/70 p-5">
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-700" htmlFor="rawCsv">
-              CSV File
-            </label>
-            <input
-              id="rawCsv"
-              name="rawCsv"
-              type="file"
-              accept=".csv,text/csv"
-              className="block w-full text-sm text-slate-700"
-            />
-          </div>
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-2xl bg-white p-4 text-sm text-slate-600">
-              <p className="font-semibold text-ink">Concept mastery CSV</p>
-              <pre className="mt-2 whitespace-pre-wrap text-xs leading-5">
-concept,mastery_value
-photosynthesis,82
-cellular respiration,69
-              </pre>
-            </div>
-            <div className="rounded-2xl bg-white p-4 text-sm text-slate-600">
-              <p className="font-semibold text-ink">Distribution CSV</p>
-              <pre className="mt-2 whitespace-pre-wrap text-xs leading-5">
-band,count
-low,8
-medium,14
-high,10
-              </pre>
-            </div>
-          </div>
-          <p className="text-xs leading-5 text-slate-500">
-            CSV uploads are stored as temporary raw files for the configured retention window and
-            should never include student names or identifiers.
+
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-neutral-700 dark:text-neutral-200" htmlFor="participationRate">
+            Participation Rate
+          </label>
+          <input
+            id="participationRate"
+            name="participationRate"
+            inputMode="decimal"
+            className="w-full rounded-2xl border border-neutral-200 px-4 py-3 text-sm outline-none transition focus:border-primary-400 focus:ring-2 focus:ring-primary-100 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:focus:border-primary-500 dark:focus:ring-primary-500/20"
+            placeholder="0.88 or 88"
+          />
+          <p className="text-xs leading-5 text-neutral-500 dark:text-neutral-400">
+            Enter a decimal or percent for the portion of the class that completed it.
           </p>
         </div>
-      )}
 
-      <div className="mt-6 grid gap-5 md:grid-cols-2">
         <div className="space-y-2">
-          <label className="text-sm font-medium text-slate-700" htmlFor="confidenceSummary">
-            Confidence Summary
+          <label className="text-sm font-medium text-neutral-700 dark:text-neutral-200" htmlFor="currentTeachingMethod">
+            Current Teaching Method
           </label>
-          <textarea
-            id="confidenceSummary"
-            name="confidenceSummary"
-            rows={4}
-            className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-pine focus:ring-2 focus:ring-pine/20"
-            placeholder="Most students felt confident, but several still hesitated on transfer questions."
+          <input
+            id="currentTeachingMethod"
+            name="currentTeachingMethod"
+            className="w-full rounded-2xl border border-neutral-200 px-4 py-3 text-sm outline-none transition focus:border-primary-400 focus:ring-2 focus:ring-primary-100 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:focus:border-primary-500 dark:focus:ring-primary-500/20"
+            placeholder="Peer instruction"
           />
         </div>
 
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-slate-700" htmlFor="teacherNote">
-            Teacher Note
+        <div className="space-y-2 md:col-span-2">
+          <label className="text-sm font-medium text-neutral-700 dark:text-neutral-200" htmlFor="teacherObservation">
+            Teacher Observation
           </label>
           <textarea
-            id="teacherNote"
-            name="teacherNote"
+            id="teacherObservation"
+            name="teacherObservation"
             rows={4}
-            className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-pine focus:ring-2 focus:ring-pine/20"
-            placeholder="Students discussed misconceptions around ATP use during peer checks."
+            className="w-full rounded-2xl border border-neutral-200 px-4 py-3 text-sm outline-none transition focus:border-primary-400 focus:ring-2 focus:ring-primary-100 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:focus:border-primary-500 dark:focus:ring-primary-500/20"
+            placeholder="Class discussion was active, but many students still struggled to apply the concept independently."
           />
         </div>
       </div>
@@ -235,12 +201,19 @@ high,10
 
       {state.success ? (
         <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-          {state.success}
+          {isNavigatingToRecommendations
+            ? "Assessment saved. Opening recommendations..."
+            : state.success}
         </div>
       ) : null}
 
       <div className="mt-6">
-        <SubmitButton idleLabel="Save Assessment" pendingLabel="Saving..." />
+        <SubmitButton
+          idleLabel="Save Assessment"
+          pendingLabel={
+            isNavigatingToRecommendations ? "Opening recommendations..." : "Saving..."
+          }
+        />
       </div>
     </form>
   );

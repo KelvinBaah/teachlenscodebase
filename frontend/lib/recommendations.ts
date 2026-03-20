@@ -185,9 +185,8 @@ function detectPatternIds(
   analysis: AssessmentAnalysis,
 ): PatternId[] {
   const ids: PatternId[] = [];
-  const noteText = `${assessment.teacher_note ?? ""} ${assessment.confidence_summary ?? ""}`.toLowerCase();
+  const noteText = `${assessment.teacher_observation ?? ""}`.toLowerCase();
   const lowBand = analysis.understandingBands.find((band) => band.label === "Low")?.count ?? 0;
-  const highBand = analysis.understandingBands.find((band) => band.label === "High")?.count ?? 0;
 
   if (analysis.averageScore !== null && analysis.averageScore < 60) {
     ids.push("widespread_conceptual_misunderstanding");
@@ -197,29 +196,32 @@ function detectPatternIds(
     ids.push("foundational_struggle");
   }
 
-  if (lowBand > 0 && highBand > 0) {
-    ids.push("wide_performance_gap");
-  }
-
   if (analysis.confidenceMismatch) {
     ids.push("confident_but_poor");
+  }
+
+  if (analysis.averageConfidence !== null && analysis.averageConfidence <= 2.5) {
+    ids.push("confused_low_confidence");
+  }
+
+  if (analysis.participationRate !== null && analysis.participationRate < 60) {
+    ids.push("low_participation");
   }
 
   if (analysis.averageScore !== null && analysis.averageScore >= 85) {
     ids.push("quick_mastery");
   }
 
-  if (analysis.conceptMetrics.length > 1) {
-    const strongest = analysis.conceptMetrics[0]?.score ?? 0;
-    const weakest = analysis.conceptMetrics[analysis.conceptMetrics.length - 1]?.score ?? 0;
-
-    if (strongest - weakest >= 15) {
-      ids.push("uneven_concept_understanding");
-    }
+  if (analysis.averageScore !== null && analysis.averageScore >= 60 && analysis.averageScore < 75) {
+    ids.push("wide_performance_gap");
   }
 
-  if (["hesitant", "uncertain", "low confidence", "nervous"].some((term) => noteText.includes(term))) {
-    ids.push("confused_low_confidence");
+  if (
+    assessment.assessment_type === "diagnostic_check" &&
+    analysis.averageScore !== null &&
+    analysis.averageScore < 70
+  ) {
+    ids.push("uneven_concept_understanding");
   }
 
   if (["quiet", "few students", "limited participation", "low participation"].some((term) => noteText.includes(term))) {
